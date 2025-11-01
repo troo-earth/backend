@@ -1,12 +1,14 @@
-const sequelize = require('./database');
+// src/config/testDbConnection.js
+require('dotenv').config();
+const { sequelize } = require('../models');  // ← Now works!
 
+// 🧪 Test
 async function testConnection() {
   try {
     await sequelize.authenticate();
-    console.log('Connection to PostgreSQL has been established successfully.');
+    console.log('✅ **CONNECTED TO SUPABASE!** 🚀');
   } catch (error) {
-    console.error('Unable to connect to the database:', error);
+    console.error('❌ Failed:', error.message);
   }
 }
-
 testConnection();

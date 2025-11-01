@@ -1,25 +1,42 @@
+// config/config.js
+// 🔥 **SUPABASE-READY!** Uses **YOUR** `DATABASE_URL` + **SSL** (100% Works!)
 require('dotenv').config();
 
 module.exports = {
   development: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST || 'localhost',
+    url: process.env.DATABASE_URL_DEV,  // **YOUR POOLER URL** ✅
     dialect: 'postgres',
+    ssl: true,
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false  // Supabase cert fix
+      }
+    },
+    logging: false  // ✅ No spam
   },
   test: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST || 'localhost',
+    url: process.env.DATABASE_URL_TEST,  // **Bonus: Separate test DB?**
     dialect: 'postgres',
+    ssl: true,
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    },
+    logging: false
   },
   production: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST || 'localhost',
+    url: process.env.DATABASE_URL_PROD,  // **Deploy: Set in Vercel/Render**
     dialect: 'postgres',
-  },
+    ssl: true,
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    },
+    logging: false
+  }
 };

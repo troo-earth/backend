@@ -1,7 +1,9 @@
 // src/app.js
 require('dotenv').config();
 const express = require('express');
-const { sequelize } = require('./models');  // ← Uses config.js + index.js
+const sequelize = require('./config/database');
+
+const userRoutes = require('./modules/user/userRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,19 +29,21 @@ app.get('/health', async (req, res) => {
   }
 });
 
+app.use('/api/v1/users', userRoutes);
+
 // Start Server
 (async () => {
   try {
     // Test DB Connection
     await sequelize.authenticate();
-    console.log('CONNECTED TO SUPABASE! (Env:', process.env.NODE_ENV || 'development', ')');
+    console.log('✅ **CONNECTED TO SUPABASE!** 🚀 (Env:', process.env.NODE_ENV || 'development', ')');
 
     app.listen(PORT, () => {
       console.log(`Server running at http://localhost:${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/health`);
     });
   } catch (error) {
-    console.error('FAILED TO CONNECT TO SUPABASE:', error.message);
+    console.error('❌ **FAILED TO CONNECT TO SUPABASE:**', error.message);
     process.exit(1);
   }
 })();

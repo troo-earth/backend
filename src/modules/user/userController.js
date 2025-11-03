@@ -12,7 +12,7 @@ async function createUserController(req, res, next) {
       return res.error('Missing request fields', 400);
     }
 
-    const user = await createUser({ user_name, email, password });
+    const user = await createUser({ user_name, email, password});
     return res.success('User created successfully', user);
 
   } catch (error) {

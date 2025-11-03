@@ -4,6 +4,7 @@ const express = require('express');
 const sequelize = require('./config/database');
 
 const userRoutes = require('./modules/user/userRoutes');
+const projectRoutes = require('./modules/project/projectRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter')
 
@@ -34,6 +35,7 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/projects', projectRoutes);
 
 app.use(errorHandler);
 

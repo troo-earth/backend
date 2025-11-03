@@ -1,16 +1,17 @@
 const Seller = require('./sellerModel');
-const {createProject} = require("../project/projectService");
+const {where} = require("sequelize");
 
-async function createProjectForSeller(project, seller_id){
+async function findSellerById(seller_id){
 
     if(!seller_id){
         throw new Error('Seller id is required');
     }
-
-    const seller = await Seller.findOne(seller_id);
+    const seller = await Seller.findOne({ where: { seller_id } });
     if(!seller){
         throw new Error('Seller does not exist ');
     }
 
-    return await createProject(project, seller_id);
+    return seller;
 }
+
+module.exports = { findSellerById };

@@ -1,5 +1,4 @@
 const {getAllProjectsController, findProjectByIdController} = require("./projectController");
-const {findProjectByIdSellerController} = require("../seller/sellerController");
 const router = require('express').Router();
 
 router.get('/', getAllProjectsController);

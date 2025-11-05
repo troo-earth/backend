@@ -1,4 +1,4 @@
-const { createProject, getAllProjects, findProjectById} = require('./projectService');
+const { getAllProjects, findProjectById} = require('./projectService');
 
 async function getAllProjectsController(req, res, next) {
     try {

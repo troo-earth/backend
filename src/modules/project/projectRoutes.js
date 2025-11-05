@@ -1,6 +1,9 @@
-const {createProjectController} = require("./projectController");
+const {getAllProjectsController, findProjectByIdController} = require("./projectController");
+const {findProjectByIdSellerController} = require("../seller/sellerController");
 const router = require('express').Router();
 
-router.post('/', createProjectController);
+router.get('/', getAllProjectsController);
+router.get('/:id', findProjectByIdController);
+// router.post('/:id/upload-docs', uploadProjectDocsController);
 
 module.exports = router;

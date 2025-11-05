@@ -6,6 +6,6 @@ const router  = express.Router();
 router.post("/:id/projects", createProjectSellerController)
 router.get("/:id/projects", getAllProjectsSellerController)
 router.get("/:id/projects/:projectId", findProjectByIdSellerController)
-router.get(":id", sellerProfileController)
+router.get("/:id", sellerProfileController)
 
 module.exports = router;

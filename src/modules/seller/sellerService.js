@@ -1,5 +1,4 @@
 const Seller = require('./sellerModel');
-const {where} = require("sequelize");
 const {createProject, getAllProjectsBySeller, findProjectBySellerId} = require("../project/projectService");
 
 //find the seller by id

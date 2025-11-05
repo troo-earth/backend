@@ -1,5 +1,4 @@
 const Project = require('./projectModel');
-const Seller = require("../seller/sellerModel");
 
 //find project by its id
 async function findProjectById(project_id){

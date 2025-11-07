@@ -6,6 +6,8 @@ const sequelize = require('./config/database');
 const userRoutes = require('./modules/user/userRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter')
+const globalRouteLogger = require('./middleware/routeLogger');
+const { tracingMiddleware } = require('./middleware/tracingMiddleware');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,7 +15,8 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(express.json());
 app.use(responseFormatter);
-
+app.use(tracingMiddleware);
+app.use(globalRouteLogger);
 
 // Health Check + DB Status
 app.get('/health', async (req, res) => {

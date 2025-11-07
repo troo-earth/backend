@@ -78,7 +78,15 @@ async function updateUserService(user_id, updateFields) {
   return user;
 }
 
+async function viewUserService(user_id) {
+  if (!user_id) throw new Error('Missing user ID');
+  const user = await User.findByPk(user_id);
+  if (!user) throw new Error('User not found');
+  return user;
+}
+
 module.exports = {
   createUserService: withLogging(createUserService, 'createUserService'),
   updateUserService: withLogging(updateUserService, 'updateUserService'),
+  viewUserService: withLogging(viewUserService, 'viewUserService'),
 };

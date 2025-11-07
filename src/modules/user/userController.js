@@ -1,4 +1,4 @@
-const { createUserService, updateUserService } = require('./userService');
+const { createUserService, updateUserService, viewUserService } = require('./userService');
 const { withLogging } = require('../../utils/logger');
 
 // Create user route
@@ -60,7 +60,24 @@ async function updateUserController(req, res, next) {
   }
 }
 
+async function viewUserController(req, res, next) {
+  try {
+    const user_id = req.params.id;
+    const user = await viewUserService(user_id);
+    return res.success('User found', user);
+  } catch (error) {
+    if (error.message === 'Missing user ID') {
+      return res.error(error.message, 400);
+    }
+    if (error.message === 'User not found') {
+      return res.error(error.message, 404);
+    }
+    next(error); // Unexpected errors
+  }
+}
+
 module.exports = {
   createUserController: withLogging(createUserController, 'createUserController'),
   updateUserController: withLogging(updateUserController, 'updateUserController'),
+  viewUserController: withLogging(viewUserController, 'viewUserController'),
 };

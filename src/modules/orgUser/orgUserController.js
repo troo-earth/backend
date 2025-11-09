@@ -4,6 +4,7 @@ const {
   assignRole,
   removeMember,
 } = require('./orgUserService');
+const { withlogger } = require('../../utils/logger');
 
 async function inviteMemberController(req, res, next) {
   try {
@@ -55,8 +56,8 @@ async function removeMemberController(req, res, next) {
 }
 
 module.exports = {
-  inviteMemberController,
-  viewMembersController,
-  assignRoleController,
-  removeMemberController,
+  inviteMemberController: withLogging(inviteMemberController, 'inviteMemberController'),
+  viewMembersController: withLogging(viewMembersController, 'viewMembersController'),
+  assignRoleController: withLogging(assignRoleController, 'assignRoleController'),
+  removeMemberController: withLogging(removeMemberController, 'removeMemberController'),
 };

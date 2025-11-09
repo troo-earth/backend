@@ -1,8 +1,9 @@
 const Seller = require('./sellerModel');
-const {createProject, getAllProjectsBySeller, findProjectBySellerId} = require("../project/projectService");
+const {createProjectService, getAllProjectsBySellerService, findProjectBySellerIdService} = require("../project/projectService");
+const {withLogging} = require("../../utils/logger");
 
 //find the seller by id
-async function findSellerById(seller_id){
+async function findSellerByIdService(seller_id){
 
     if(!seller_id){
         throw new Error('Seller id is required');
@@ -14,16 +15,16 @@ async function findSellerById(seller_id){
     return seller;
 }
 
-async function findSellerProjectById(id, projectId){
+async function findSellerProjectByIdService(id, projectId){
     if(!projectId || !id){
         throw new Error('Project id and seller id is required');
     }
 
-    return await findProjectBySellerId(id, projectId);
+    return await findProjectBySellerIdService(id, projectId);
 }
 
 //create a new project
-async function createProjectSeller(seller_id, project){
+async function createProjectSellerService(seller_id, project){
     if(!project){
         throw new Error('Project is required');
     }
@@ -31,22 +32,27 @@ async function createProjectSeller(seller_id, project){
         throw new Error('Seller id is required');
     }
 
-    await findSellerById(seller_id);
-    return await createProject(project, seller_id);
+    await findSellerByIdService(seller_id);
+    return await createProjectService(project, seller_id);
 }
 
 
 //get all projects
-async function getAllProjectsSeller(seller_id){
+async function getAllProjectsSellerService(seller_id){
 
     if(!seller_id){
         throw new Error('Seller id is required');
     }
 
-    await findSellerById(seller_id);
-    return await getAllProjectsBySeller(seller_id);
+    await findSellerByIdService(seller_id);
+    return await getAllProjectsBySellerService(seller_id);
 }
 
 
 
-module.exports = { findSellerById, createProjectSeller, getAllProjectsSeller, findSellerProjectById };
+module.exports = {
+    findSellerByIdService: withLogging(findSellerByIdService, 'findSellerByIdService'),
+    createProjectSellerService: withLogging(createProjectSellerService, 'createProjectSellerService'),
+    getAllProjectsSellerService: withLogging(getAllProjectsSellerService, 'getAllProjectsSellerService'),
+    findSellerProjectByIdService: withLogging(findSellerProjectByIdService, 'findSellerProjectByIdService'),
+};

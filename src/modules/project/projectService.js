@@ -1,7 +1,8 @@
 const Project = require('./projectModel');
+const {withLogging} = require("../../utils/logger");
 
 //find project by its id
-async function findProjectById(project_id){
+async function findProjectByIdService(project_id){
 
     if(!project_id){
         throw new Error('Project id is required');
@@ -15,7 +16,7 @@ async function findProjectById(project_id){
 
 
 //find project by its seller id
-async function findProjectBySellerId(seller_id, project_id){
+async function findProjectBySellerIdService(seller_id, project_id){
 
     if(!project_id){
         throw new Error('Project id is required');
@@ -29,7 +30,7 @@ async function findProjectBySellerId(seller_id, project_id){
 
 
 //creates a new project
-async function createProject(project, seller_id){
+async function createProjectService(project, seller_id){
     const { project_name, description,  status } = project;
 
     if(!project_name || !description || !status){
@@ -56,18 +57,23 @@ async function createProject(project, seller_id){
 
 
 //get all projects
-async function getAllProjects(){
+async function getAllProjectsService(){
     return await Project.findAll();
 }
 
 
 //gets all project by seller
-async function getAllProjectsBySeller(seller_id){
+async function getAllProjectsBySellerService(seller_id){
     if(!seller_id){
         throw new Error('Seller id is required');
     }
-
     return await Project.findAll({ where: { seller_id } });
 }
 
-module.exports = { createProject, getAllProjectsBySeller, findProjectBySellerId, findProjectById, getAllProjects };
+module.exports = {
+    createProjectService: withLogging(createProjectService, 'createProjectService'),
+    getAllProjectsBySellerService: withLogging(getAllProjectsBySellerService, 'getAllProjectsBySellerService'),
+    findProjectBySellerIdService: withLogging(findProjectBySellerIdService, 'findProjectBySellerIdService'),
+    findProjectByIdService: withLogging(findProjectByIdService, 'findProjectByIdService'),
+    getAllProjectsService: withLogging(getAllProjectsService, 'getAllProjectsService'),
+};

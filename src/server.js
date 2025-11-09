@@ -41,6 +41,8 @@ app.get('/health', async (req, res) => {
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/sellers', sellerRoutes);
+app.use('/api/v1/orgs', require('./modules/org/orgRoutes'));
+app.use('/api/v1/org-users', require('./modules/orgUser/orgUserRoute'));
 
 app.use(errorHandler);
 

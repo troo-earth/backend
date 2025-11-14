@@ -4,7 +4,7 @@ const {
   assignRole,
   removeMember,
 } = require('./orgUserService');
-const { withlogger } = require('../../utils/logger');
+const { withLogging } = require('../../utils/logger');
 
 async function inviteMemberController(req, res, next) {
   try {

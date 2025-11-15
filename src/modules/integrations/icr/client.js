@@ -2,7 +2,6 @@
 const axios = require('axios');
 const { getAuthHeaders } = require('../utils/auth');
 const { handleApiError } = require('../utils/errors');
-const { getConfig } = require('../../../config/config');
 
 const baseURL = 'https://api.carbonregistry.com/v1';  // ICR base URL
 

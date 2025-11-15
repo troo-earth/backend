@@ -6,9 +6,14 @@ const sequelize = require('./config/database');
 const userRoutes = require('./modules/user/userRoutes');
 const projectRoutes = require('./modules/project/projectRoutes');
 const sellerRoutes = require('./modules/seller/sellerRoutes');
+const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
+const orgRoutes = require('./modules/org/orgRoutes');
+const orgUserRoutes = require('./modules/orgUser/orgUserRoutes');
+
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter')
 const globalRouteLogger = require('./middleware/routeLogger');
+
 const { tracingMiddleware } = require('./middleware/tracingMiddleware');
 
 const app = express();
@@ -19,6 +24,7 @@ app.use(express.json());
 app.use(responseFormatter);
 app.use(tracingMiddleware);
 app.use(globalRouteLogger);
+app.use(errorHandler);
 
 // Health Check + DB Status
 app.get('/health', async (req, res) => {
@@ -41,10 +47,9 @@ app.get('/health', async (req, res) => {
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/sellers', sellerRoutes);
-app.use('/api/v1/orgs', require('./modules/org/orgRoutes'));
-app.use('/api/v1/org-users', require('./modules/orgUser/orgUserRoute'));
-
-app.use(errorHandler);
+app.use('/api/v1/orgs', orgRoutes);
+app.use('/api/v1/org-users', orgUserRoutes);
+app.use('/api/v1/marketplace', marketplaceRoutes);
 
 // Start Server
 (async () => {

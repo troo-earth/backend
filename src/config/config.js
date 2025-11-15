@@ -2,7 +2,7 @@
 // 🔥 **SUPABASE-READY!** Uses **YOUR** `DATABASE_URL` + **SSL** (100% Works!)
 require('dotenv').config();
 
-module.exports = {
+const dbConfig = {
   development: {
     url: process.env.DATABASE_URL_DEV,  // **YOUR POOLER URL** ✅
     dialect: 'postgres',
@@ -39,4 +39,19 @@ module.exports = {
     },
     logging: false
   }
+};
+
+// Helper to get any env var (e.g., ICR_API_KEY) – used in integrations/auth.js
+const getConfig = (key) => {
+  const value = process.env[key];
+  if (!value) {
+    console.warn(`⚠️  Config key "${key}" not found in .env – add it!`);
+    return null;
+  }
+  return value;
+};
+
+module.exports = {
+  ...dbConfig,
+  getConfig
 };

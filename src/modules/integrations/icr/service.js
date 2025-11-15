@@ -30,4 +30,4 @@ class ICRService {
   }
 }
 
-module.exports = ICRService;
+module.exports = new ICRService();

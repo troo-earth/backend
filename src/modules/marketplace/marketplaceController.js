@@ -34,7 +34,7 @@ async function getProjectById(req, res, next) {
 }
 
 module.exports = {
-  getAllProjects: withLogging(getAllProjects, 'getAllProjects'),  // Pass name
-  getProjectById: withLogging(getProjectById, 'getProjectById'),  // Pass name
-  syncIcrProjects: withLogging(syncIcrProjects, 'syncIcrProjects'),  // Pass name
+  getAllProjects: withLogging(getAllProjects, 'getAllProjectsController'),  // Pass name
+  getProjectById: withLogging(getProjectById, 'getProjectByIdController'),  // Pass name
+  syncIcrProjects: withLogging(syncIcrProjects, 'syncIcrProjectsController'),  // Pass name
 };

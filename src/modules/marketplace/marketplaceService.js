@@ -2,35 +2,39 @@
 const ICRService = require('../integrations/icr/service');
 const { withLogging } = require('../../utils/logger');
 
+const IcrProject = require('./models/icrProjectsModel');  // Import once at top
+
 class marketplaceService {
   constructor() {
-    this.icr = new ICRService();
+    this.icr = require('../integrations/icr/marketplaceService');
   }
 
   async getAllProjects(options = {}) {
-  try {
-    const icrProjects = require('./models/icrProjects');
-    const { status } = options;
+    try {
+      const { status } = options;
 
-    // Build where clause
-    const where = {};
-    if (status) where.status = status;
+      // Build where clause
+      const where = {};
+      if (status) where.status = status;
 
-    // Query DB
-    const projects = await icrProjects.findAll({
-      where,
-      order: [['syncedAt', 'DESC']],  // Latest synced first
-      attributes: { exclude: ['createdAt', 'updatedAt'] },  // Hide timestamps
-    });
+      // Query DB
+      // Add Filtering, Sorting, Pagination as needed later
+      const projects = await IcrProject.findAll({
+        where,
+        order: [['syncedAt', 'DESC']],  // Latest synced first
+        attributes: { exclude: ['createdAt', 'updatedAt'] },  // Hide timestamps
+      });
 
-    const total = projects.length;
-    return { projects, total };
-  } catch (err) {
-    console.error('DB query error:', err);
-    // Fallback to API if DB fails (e.g., table empty)
-    return this.icr.getAllProjects(options);
+      const total = projects.length;
+      return { projects, total };
+    } catch (err) {
+      console.error('DB query error:', err);
+
+      // Fallback to ICR API if Supabase DB fails (e.g., table empty)
+      console.log('Falling back to ICR API');  // Debug log
+      return this.icr.getAllProjects(options);
+    }
   }
-}
 
   async getProjectById(id) {
     return this.icr.getProjectById(id);
@@ -42,7 +46,6 @@ class marketplaceService {
 
   async syncIcrProjects() {
     try {
-      const IcrProject = require('./models/icrProjects');
       const response = await this.icr.getAllProjects();  // Fetches all
       const allProjects = response.projects || [];
 
@@ -107,8 +110,8 @@ const boundSyncIcrProjects = instance.syncIcrProjects.bind(instance);
 
 // Export wrapped with names
 module.exports = {
-  getAllProjects: withLogging(boundGetAllProjects, 'getAllProjects'),
-  getProjectById: withLogging(boundGetProjectById, 'getProjectById'),
-  retireCredits: withLogging(boundRetireCredits, 'retireCredits'),
-  syncIcrProjects: withLogging(boundSyncIcrProjects, 'syncIcrProjects'),
+  getAllProjects: withLogging(boundGetAllProjects, 'getAllProjectsService'),
+  getProjectById: withLogging(boundGetProjectById, 'getProjectByIdService'),
+  retireCredits: withLogging(boundRetireCredits, 'retireCreditsService'),
+  syncIcrProjects: withLogging(boundSyncIcrProjects, 'syncIcrProjectsService'),
 };

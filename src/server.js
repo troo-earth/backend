@@ -9,6 +9,7 @@ const sellerRoutes = require('./modules/seller/sellerRoutes');
 const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
 const orgUserRoutes = require('./modules/orgUser/orgUserRoutes');
+const buyerRoutes = require('./modules/buyer/buyerRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter')
@@ -50,6 +51,7 @@ app.use('/api/v1/sellers', sellerRoutes);
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/org-users', orgUserRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
+app.use('/api/v1/buyer', buyerRoutes);
 
 // Start Server
 (async () => {

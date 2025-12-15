@@ -13,10 +13,16 @@ const dbConfig = {
         rejectUnauthorized: false  // Supabase cert fix
       }
     },
-    logging: false  // ✅ No spam
+    logging: false,  // ✅ No spam
+    pool: {          // ← ADD THIS BLOCK
+      max: 3,
+      min: 0,
+      idle: 10000,
+      acquire: 30000
+    }
   },
   test: {
-    url: process.env.DATABASE_URL_TEST,  // **Bonus: Separate test DB?**
+    url: process.env.DATABASE_URL_TEST,
     dialect: 'postgres',
     ssl: true,
     dialectOptions: {
@@ -25,10 +31,16 @@ const dbConfig = {
         rejectUnauthorized: false
       }
     },
-    logging: false
+    logging: false,
+    pool: {          // ← ADD THIS BLOCK
+      max: 3,
+      min: 0,
+      idle: 10000,
+      acquire: 30000
+    }
   },
   production: {
-    url: process.env.DATABASE_URL_PROD,  // **Deploy: Set in Vercel/Render**
+    url: process.env.DATABASE_URL_PROD,
     dialect: 'postgres',
     ssl: true,
     dialectOptions: {
@@ -37,11 +49,17 @@ const dbConfig = {
         rejectUnauthorized: false
       }
     },
-    logging: false
+    logging: false,
+    pool: {          // ← ADD THIS BLOCK (most important!)
+      max: 3,
+      min: 0,
+      idle: 10000,
+      acquire: 30000
+    }
   }
 };
 
-// Helper to get any env var (e.g., ICR_API_KEY) – used in integrations/auth.js
+// Helper to get any env var
 const getConfig = (key) => {
   const value = process.env[key];
   if (!value) {

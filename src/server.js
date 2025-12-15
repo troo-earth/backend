@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
+let MemoryStore = require('express-session').MemoryStore;
 const SequelizeStoreInit = require('connect-session-sequelize');
 const sequelize = require('./config/database');
 
@@ -11,33 +12,49 @@ const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
 const orgUserRoutes = require('./modules/orgUser/orgUserRoutes');
 const buyerRoutes = require('./modules/buyer/buyerRoutes');
+const paymentRoutes = require('./modules/payments/paymentRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
-const responseFormatter = require('./middleware/responseFormatter')
+const responseFormatter = require('./middleware/responseFormatter');
 const globalRouteLogger = require('./middleware/routeLogger');
-
 const { tracingMiddleware } = require('./middleware/tracingMiddleware');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const cors = require('cors');
 
 const SequelizeStore = SequelizeStoreInit(session.Store);
 
-// Middleware
+// Middleware (same as before)
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // Added for form data support (optional)
+app.use(express.urlencoded({ extended: true }));
 
-// Session setup — production-ready
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'troo-earth-super-secret-2025', // Use env var!
-  store: new SequelizeStore({
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true,
+}));
+
+let sessionStore;
+
+if (process.env.VERCEL) {
+  // On Vercel: Use memory store (sessions won't persist across instances)
+  sessionStore = new MemoryStore();
+  console.warn('⚠️  Running on Vercel – using MemoryStore for sessions (short-lived)');
+} else {
+  // Locally: Keep your DB store
+  const SequelizeStore = SequelizeStoreInit(session.Store);
+  sessionStore = new SequelizeStore({
     db: sequelize,
-    tableName: 'Sessions', // Auto-creates this table
-  }),
+    tableName: 'Sessions',
+  });
+}
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'troo-earth-super-secret-2025',
+  store: sessionStore,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS only in prod
+    secure: process.env.NODE_ENV === 'production', // true on Vercel production
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     sameSite: 'lax',
@@ -49,26 +66,23 @@ app.use(tracingMiddleware);
 app.use(globalRouteLogger);
 app.use(errorHandler);
 
-// Make session user available in all requests (optional but useful)
 app.use((req, res, next) => {
   res.locals.user = req.session.user || null;
   next();
 });
 
-// Health Check + DB Status
 app.get('/health', async (req, res) => {
   try {
     await sequelize.authenticate();
     res.json({
       status: 'API LIVE',
       database: 'SUPABASE CONNECTED',
-      env: process.env.NODE_ENV || 'development',
-      timestamp: new Date().toISOString()
+      // ...
     });
   } catch (err) {
     res.status(500).json({
       status: 'DB ERROR',
-      error: err.message
+      // ...
     });
   }
 });
@@ -80,21 +94,18 @@ app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/org-users', orgUserRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
 app.use('/api/v1/buyer', buyerRoutes);
+app.use('/api/v1/payments', paymentRoutes);
 
-// Start Server
-(async () => {
-  try {
-    // Test DB Connection + sync Sessions table
-    await sequelize.authenticate();
-    await sequelize.sync({ alter: true }); // Safe: creates/alters Sessions if needed, no data loss
-    console.log('✅ **CONNECTED TO SUPABASE!** 🚀 (Env:', process.env.NODE_ENV || 'development', ')');
+// Conditional listen ONLY for local development
+// Only start the server when running locally (not on Vercel)
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  const PORT = process.env.PORT || 3000;
+  
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+    console.log(`Health check: http://localhost:${PORT}/health`);
+  });
+}
 
-    app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
-      console.log(`Health check: http://localhost:${PORT}/health`);
-    });
-  } catch (error) {
-    console.error('❌ **FAILED TO CONNECT TO SUPABASE:**', error.message);
-    process.exit(1);
-  }
-})();
+// REQUIRED for Vercel
+module.exports = app;

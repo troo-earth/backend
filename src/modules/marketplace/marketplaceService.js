@@ -2,7 +2,7 @@
 const ICRService = require('../integrations/icr/service');
 const { withLogging } = require('../../utils/logger');
 
-const IcrProject = require('./models/icrProjectsModel');  // Import once at top
+const IcrProject = require('./models/icrProjects.js');
 
 class marketplaceService {
   constructor() {
@@ -37,7 +37,29 @@ class marketplaceService {
   }
 
   async getProjectById(id) {
-    return this.icr.getProjectById(id);
+    try {
+      const IcrProject = require('./models/icrProjects.js');
+
+      // Query DB by id
+      const project = await IcrProject.findByPk(id);  // findByPk for primary key lookup
+
+      if (project) {
+        // Tweak: Add totalCo2 (calculated from mitigations)
+        project.totalCo2 = project.estimatedAnnualMitigations ? project.estimatedAnnualMitigations.reduce((sum, m) => sum + (m.estimatedMitigation || 0), 0) : 0;
+        //console.log(`Computed totalCo2 for project ${id}: ${project.totalCo2}`);
+        return project;  // Return as object (matches API shape)
+      }
+
+      // // Fallback to ICR API if not in DB
+      // console.log(`Project ${id} not in DB, falling back to API`);
+      // const apiData = await this.icr.getProjectById(id);
+      // // Tweak API data too
+      // apiData.totalCo2 = apiData.estimatedAnnualMitigations ? apiData.estimatedAnnualMitigations.reduce((sum, m) => sum + (m.estimatedMitigation || 0), 0) : 0;
+      // return apiData;
+    } catch (err) {
+      console.error('getProjectById error:', err);
+      throw err;
+    }
   }
 
   async retireCredits(userId, creditSerials, options = {}) {

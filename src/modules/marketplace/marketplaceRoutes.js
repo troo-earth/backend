@@ -15,6 +15,9 @@ router.get('/projects/:id', getProjectById);
 // Admin sync route (add auth middleware later)
 router.post('/admin-sync', syncIcrProjects);
 
+// GET /api/marketplace/projects/:id (single project)
+router.get('/projects/:id', getProjectById);
+
 // TODO: Add more routes (e.g., POST /retire)
 // router.post('/retire', auth, controller.retireCredits);
 

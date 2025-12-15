@@ -23,9 +23,9 @@ class ICRService {
       filtered = filtered.filter(p => p.status === status);
     }
 
-    return { 
-      projects: filtered, 
-      total: filtered.length 
+    return {
+      projects: filtered,
+      total: filtered.length
     };
   }
 }

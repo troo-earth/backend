@@ -87,6 +87,13 @@ app.get('/health', async (req, res) => {
   }
 });
 
+app.get('/debug-cors', (req, res) => {
+  res.json({
+    frontendUrlFromEnv: process.env.FRONTEND_URL || '(empty - using fallback)',
+    currentCorsOrigin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  });
+});
+
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/sellers', sellerRoutes);

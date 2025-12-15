@@ -25,7 +25,7 @@ async function syncIcrProjects(req, res, next) {
 
 async function getProjectById(req, res, next) {
   try {
-    const { id } = req.params;
+    const { id } = req.params;  // From URL: /projects/:id
     const data = await marketplaceService.getProjectById(id);
     res.json({ success: true, data });
   } catch (err) {

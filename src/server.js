@@ -13,6 +13,7 @@ const orgRoutes = require('./modules/org/orgRoutes');
 const orgUserRoutes = require('./modules/orgUser/orgUserRoutes');
 const buyerRoutes = require('./modules/buyer/buyerRoutes');
 const paymentRoutes = require('./modules/payments/paymentRoutes');
+const authRoutes = require('./modules/auth/authRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
@@ -95,6 +96,7 @@ app.use('/api/v1/org-users', orgUserRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
 app.use('/api/v1/buyer', buyerRoutes);
 app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/auth', authRoutes);
 
 // Conditional listen ONLY for local development
 // Only start the server when running locally (not on Vercel)

@@ -3,8 +3,9 @@ const { withLogging } = require('../../utils/logger');
 const User = require('./userModel');
 const bcrypt = require('bcrypt');
 const { Op } = require('sequelize');
+const { sendEmail } = require('../emails/emailService');
+const { accountCreatedTemplate } = require('../emails/emailTemplates');
 
-// create user
 async function createUserService({ user_name, email, password }) {
   if (!isValidEmail(email)) {
     throw new Error('Invalid email format');
@@ -25,7 +26,20 @@ async function createUserService({ user_name, email, password }) {
   }
 
   const password_hash = await bcrypt.hash(password, 10);
-  return await User.create({ user_name, email, password_hash });
+  const newUser = await User.create({ user_name, email, password_hash });
+
+  // Send welcome email (non-blocking; catch errors to avoid blocking user creation)
+  const html = accountCreatedTemplate({ user_name });
+  sendEmail({
+    to: email,
+    subject: 'Welcome to troo.earth!',
+    html,
+  }).catch((error) => {
+    console.error(`Failed to send welcome email to ${email}:`, error.message);
+    // Optionally, queue for retry or log to monitoring service
+  });
+
+  return newUser; // Return the new user (sanitize if needed, e.g., omit password_hash)
 }
 
 async function updateUserService(user_id, updateFields) {

@@ -1,8 +1,5 @@
 const { createUserService, updateUserService, viewUserService } = require('./userService');
 const { withLogging } = require('../../utils/logger');
-const { sendEmail } = require('../../utils/emailService');
-const { accountCreatedTemplate } = require('../../templates/accountCreated');
-const { accountUpdatedTemplate } = require('../../templates/accountUpdated');
 
 // Create user route
 async function createUserController(req, res, next) {
@@ -15,18 +12,8 @@ async function createUserController(req, res, next) {
     if (!user_name || !email || !password) {
       return res.error('Missing request fields', 400);
     }
-    // 1️⃣ Create user in DB
     const user = await createUserService({ user_name, email, password });
-    // 2️⃣ Send welcome email (NON-BLOCKING)
-    sendEmail({
-      to: user.email,
-      subject: 'Welcome to Troo',
-      html: accountCreatedTemplate({
-        user_name: user.user_name,
-      }),
-    });
 
-    // 3️⃣ Return API response
     return res.success('User created successfully', user);
 
   } catch (error) {
@@ -49,13 +36,6 @@ async function updateUserController(req, res, next) {
     const user_id = req.params.id;
     const updateFields = req.body;
     const user = await updateUserService(user_id, updateFields);
-    sendEmail({
-      to: user.email,
-      subject: 'Your Troo account was updated',
-      html: accountUpdatedTemplate({
-        user_name: user.user_name,
-      }),
-    });
     return res.success('User updated successfully', user);
   } catch (error) {
     switch (error.message) {

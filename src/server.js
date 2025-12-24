@@ -29,9 +29,22 @@ const SequelizeStore = SequelizeStoreInit(session.Store);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const allowedOrigins = process.env.FRONTEND_URLS ? process.env.FRONTEND_URLS.split(',') : [];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
-  credentials: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g., server-to-server or non-browser tools like Postman)
+    if (!origin) return callback(null, true);
+
+    // Check if the incoming origin matches any allowed one
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);  // Allow
+    } else {
+      console.log(`Blocked CORS request from unauthorized origin: ${origin}`);  // Log the blocked origin
+      return callback(new Error('Not allowed by CORS'));  // Block
+    }
+  },
+  credentials: true,  // Still supports cookies/auth
 }));
 
 let sessionStore;

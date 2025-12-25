@@ -29,23 +29,34 @@ const SequelizeStore = SequelizeStoreInit(session.Store);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const allowedOrigins = process.env.FRONTEND_URLS ? process.env.FRONTEND_URLS.split(',') : [];
+const devPassword = process.env.DEV_PASSWORD;
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (e.g., server-to-server or non-browser tools like Postman)
-    if (!origin) return callback(null, true);
+app.use((req, res, next) => {
+  const allowedSuffix = process.env.FRONTEND_URL_ENDS_WITH || '.troo.earth';
+  console.log('CORS allowed origins suffix:', allowedSuffix);
+  console.log('CORS dev password:', devPassword);
 
-    // Check if the incoming origin matches any allowed one
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);  // Allow
-    } else {
-      console.log(`Blocked CORS request from unauthorized origin: ${origin}`);  // Log the blocked origin
-      return callback(new Error('Not allowed by CORS'));  // Block
-    }
-  },
-  credentials: true,  // Still supports cookies/auth
-}));
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      // Priority: Check suffix first
+      if (origin.toLowerCase().endsWith(allowedSuffix)) {
+        return callback(null, true);
+      }
+
+      // Then dev password (single string equality check)
+      const devPasswordHeader = req.headers['dev-password'];
+      if (devPasswordHeader === devPassword) {
+        return callback(null, true);
+      } else {
+        console.log(`Blocked CORS from: ${origin}`);
+        return callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  })(req, res, next);
+});
 
 let sessionStore;
 

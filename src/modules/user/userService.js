@@ -4,92 +4,145 @@ const User = require('./userModel');
 const bcrypt = require('bcrypt');
 const { Op } = require('sequelize');
 const { sendEmail } = require('../emails/emailService');
-const { accountCreatedTemplate } = require('../emails/emailTemplates');
+const { accountCreatedTemplate, accountUpdatedTemplate } = require('../emails/emailTemplates');
 
-async function createUserService({ user_name, email, password }) {
-  if (!isValidEmail(email)) {
+async function createUserService({ user_name, email, password, fullname }) {
+  // Validate and sanitize inputs
+  if (!user_name || typeof user_name !== 'string' || user_name.trim() === '') {
+    throw new Error('Username is required and must be a non-empty string');
+  }
+
+  if (!email || !isValidEmail(email)) {
     throw new Error('Invalid email format');
   }
 
-  if (!isValidPassword(password)) {
+  if (!password || !isValidPassword(password)) {
     throw new Error('Invalid password format');
   }
 
-  const existingEmailUser = await User.findOne({ where: { email } });
+  if (!fullname || typeof fullname !== 'string' || fullname.trim() === '') {
+    throw new Error('Full name is required and must be a non-empty string');
+  }
+
+  // Check for invalid characters in fullname (letters, spaces, hyphens, apostrophes only)
+  const nameRegex = /^[A-Za-z\s\-']+$/;
+  if (!nameRegex.test(fullname.trim())) {
+    throw new Error('Full name contains invalid characters (only letters, spaces, hyphens, and apostrophes allowed)');
+  }
+
+  const trimmedUsername = user_name.trim();
+  const normalizedEmail = email.trim().toLowerCase();
+  const cleanedFullname = fullname
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, char => char.toUpperCase())
+    .replace(/\s+/g, ' ');  // Title Case and normalize spaces
+
+  const firstName = cleanedFullname.split(' ')[0];
+
+  // Uniqueness checks
+  const existingEmailUser = await User.findOne({ where: { email: normalizedEmail } });
   if (existingEmailUser) {
     throw new Error('Email already registered');
   }
 
-  const existingUserNameUser = await User.findOne({ where: { user_name } });
+  const existingUserNameUser = await User.findOne({ where: { user_name: trimmedUsername } });
   if (existingUserNameUser) {
     throw new Error('Username already registered');
   }
 
+  // Hash password
   const password_hash = await bcrypt.hash(password, 10);
-  const newUser = await User.create({ user_name, email, password_hash });
 
-  // Send welcome email (non-blocking; catch errors to avoid blocking user creation)
-  const html = accountCreatedTemplate({ user_name });
+  // Create user in DB
+  const newUser = await User.create({
+    user_name: trimmedUsername,
+    email: normalizedEmail,
+    password_hash,
+    fullname: cleanedFullname,  // Add cleaned fullname to DB
+  });
+
+  // Send welcome email using first name (non-blocking)
+  const html = accountCreatedTemplate({ user_name: firstName });
   sendEmail({
-    to: email,
+    to: normalizedEmail,
     subject: 'Welcome to troo.earth!',
     html,
   }).catch((error) => {
-    console.error(`Failed to send welcome email to ${email}:`, error.message);
+    console.error(`Failed to send welcome email to ${normalizedEmail}:`, error.message);
     // Optionally, queue for retry or log to monitoring service
   });
 
-  return newUser; // Return the new user (sanitize if needed, e.g., omit password_hash)
+  return newUser;  // Return raw user object (controller will sanitize)
 }
 
 async function updateUserService(user_id, updateFields) {
   if (!user_id) throw new Error('Missing user ID');
   if (!updateFields || Object.keys(updateFields).length === 0) throw new Error('Missing update fields');
 
-  const allowedFields = ['user_name', 'email', 'password'];
+  const allowedFields = ['user_name', 'email', 'password', 'fullname'];
   const validUpdateFields = Object.keys(updateFields).filter(f => allowedFields.includes(f));
   if (validUpdateFields.length === 0) throw new Error('No valid update fields provided');
 
-  if (updateFields.email && !updateFields.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-    throw new Error('Invalid email format');
+  // Validate and sanitize individual fields
+  if (updateFields.email) {
+    if (!isValidEmail(updateFields.email)) {
+      throw new Error('Invalid email format');
+    }
+    updateFields.email = updateFields.email.trim().toLowerCase();  // Normalize email
   }
 
-  // Uniqueness checks using Sequelize Op.ne
-  if (updateFields.email) {
-    const exists = await User.findOne({
-      where: {
-        email: updateFields.email,
-        user_id: { [Op.ne]: user_id }
-      }
-    });
-    if (exists) throw new Error('Email already registered');
+  if (updateFields.password && !isValidPassword(updateFields.password)) {
+    throw new Error('Invalid password format');
+  }
+
+  if (updateFields.fullname) {
+    if (typeof updateFields.fullname !== 'string' || updateFields.fullname.trim() === '') {
+      throw new Error('Full name must be a non-empty string');
+    }
+    const nameRegex = /^[A-Za-z\s\-']+$/;
+    if (!nameRegex.test(updateFields.fullname.trim())) {
+      throw new Error('Full name contains invalid characters');
+    }
+    updateFields.fullname = updateFields.fullname
+      .trim()
+      .toLowerCase()
+      .replace(/\b\w/g, char => char.toUpperCase())
+      .replace(/\s+/g, ' ');  // Title Case
   }
 
   if (updateFields.user_name) {
-    const exists = await User.findOne({
-      where: {
-        user_name: updateFields.user_name,
-        user_id: { [Op.ne]: user_id }
-      }
-    });
-    if (exists) throw new Error('Username already registered');
+    updateFields.user_name = updateFields.user_name.trim();
   }
 
   // Hash password if updating
   if (updateFields.password) {
-    const saltRounds = 10;
-    const hash = await bcrypt.hash(updateFields.password, saltRounds);
-    updateFields.password_hash = hash;
+    updateFields.password_hash = await bcrypt.hash(updateFields.password, 10);
     delete updateFields.password;
   }
 
-  // Perform update
-  await User.update(updateFields, { where: { user_id } });
-  const user = await User.findByPk(user_id);
-  if (!user) throw new Error('User not found');
+  // Perform update based solely on user_id (no uniqueness checks)
+  const [updatedCount] = await User.update(updateFields, { where: { user_id } });
+  if (updatedCount === 0) throw new Error('User not found');
 
-  return user;
-}
+  const updatedUser = await User.findByPk(user_id);
+
+  // Send update confirmation email (non-blocking)
+  // If fullname not in request, use from DB; else use updated one (already in updatedUser)
+  const nameForEmail = updateFields.fullname || updatedUser.fullname || updatedUser.user_name;
+  const firstName = nameForEmail.split(' ')[0];
+  const html = accountUpdatedTemplate({ user_name: firstName });
+  sendEmail({
+    to: updatedUser.email,
+    subject: 'Your troo.earth Account Was Updated',
+    html,
+  }).catch((error) => {
+    console.error(`Failed to send update email to ${updatedUser.email}:`, error.message);
+    // Optionally, queue for retry or log to monitoring service
+  });
+
+  return updatedUser;
+} 
 
 async function viewUserService(user_id) {
   if (!user_id) throw new Error('Missing user ID');

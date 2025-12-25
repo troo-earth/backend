@@ -32,9 +32,7 @@ app.use(express.urlencoded({ extended: true }));
 const devPassword = process.env.DEV_PASSWORD;
 
 app.use((req, res, next) => {
-  const allowedSuffix = process.env.FRONTEND_URL_ENDS_WITH || '.troo.earth';
-  console.log('CORS allowed origins suffix:', allowedSuffix);
-  console.log('CORS dev password:', devPassword);
+  const allowedSuffix = process.env.FRONTEND_URL_ENDS_WITH;
 
   cors({
     origin: (origin, callback) => {
@@ -50,7 +48,7 @@ app.use((req, res, next) => {
       if (devPasswordHeader === devPassword) {
         return callback(null, true);
       } else {
-        console.log(`Blocked CORS from: ${origin}`);
+        console.warn(`Blocked CORS from: ${origin}`);
         return callback(new Error('Not allowed by CORS'));
       }
     },

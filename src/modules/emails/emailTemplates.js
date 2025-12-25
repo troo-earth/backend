@@ -34,7 +34,7 @@ function accountUpdatedTemplate({ user_name }) {
   const accountUrl = "https://dev.troo.earth/"; // Replace with your actual URL
 
   const content = `
-    <h1>Account Details Updated</h1>
+    <h1>Account Details Successfully Updated</h1>
 
     <p>Hi ${user_name},</p>
 

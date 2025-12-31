@@ -1,5 +1,4 @@
 const Seller = require('./sellerModel');
-const {createProjectService, getAllProjectsBySellerService, findProjectBySellerIdService} = require("../project/projectService");
 const {withLogging} = require("../../utils/logger");
 
 //find the seller by id

@@ -6,7 +6,6 @@ const SequelizeStoreInit = require('connect-session-sequelize');
 const sequelize = require('./config/database');
 
 const userRoutes = require('./modules/user/userRoutes');
-const projectRoutes = require('./modules/project/projectRoutes');
 const sellerRoutes = require('./modules/seller/sellerRoutes');
 const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
@@ -15,6 +14,7 @@ const buyerRoutes = require('./modules/buyer/buyerRoutes');
 const paymentRoutes = require('./modules/payments/paymentRoutes');
 const authRoutes = require('./modules/auth/authRoutes');
 const listingRoutes = require('./modules/listing/listingRoutes');
+const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
@@ -112,7 +112,6 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/sellers', sellerRoutes);
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/org-users', orgUserRoutes);
@@ -121,6 +120,7 @@ app.use('/api/v1/buyer', buyerRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/listings', listingRoutes);
+app.use('/api/v1/holdings', holdingsRoutes);
 
 // Conditional listen ONLY for local development
 // Only start the server when running locally (not on Vercel)

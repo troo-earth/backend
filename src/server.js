@@ -15,6 +15,7 @@ const paymentRoutes = require('./modules/payments/paymentRoutes');
 const authRoutes = require('./modules/auth/authRoutes');
 const listingRoutes = require('./modules/listing/listingRoutes');
 const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
+const tradingRoutes = require('./modules/trading/tradingRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
@@ -121,6 +122,7 @@ app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/listings', listingRoutes);
 app.use('/api/v1/holdings', holdingsRoutes);
+app.use('/api/v1/trading', tradingRoutes);
 
 // Conditional listen ONLY for local development
 // Only start the server when running locally (not on Vercel)

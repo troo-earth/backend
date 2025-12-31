@@ -19,9 +19,13 @@ const Holdings = sequelize.define('Holdings', {
         type: DataTypes.INTEGER,
         allowNull: true,
     },
-
     credit_balance: {
-        type: DataTypes.DECIMAL(18, 2),   // two decimals only
+        type: DataTypes.DECIMAL(18,2),
+        allowNull: false,
+        defaultValue: 0,
+    },
+    locked_for_sale: {
+        type: DataTypes.DECIMAL(18,2),
         allowNull: false,
         defaultValue: 0,
     }
@@ -29,5 +33,10 @@ const Holdings = sequelize.define('Holdings', {
     tableName: 'Holdings',
     timestamps: true,
 });
+
+// Virtual calculated field
+Holdings.prototype.available_to_use = function () {
+    return (parseFloat(this.credit_balance) - parseFloat(this.locked_for_sale)).toFixed(2);
+};
 
 module.exports = Holdings;

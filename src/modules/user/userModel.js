@@ -4,7 +4,7 @@ const sequelize = require('../../config/database');
 const User = sequelize.define('User', {
   user_id: {
   type: DataTypes.UUID,
-  defaultValue: DataTypes.UUIDV4,  // Automatically generate UUIDs
+  defaultValue: DataTypes.UUIDV4, 
   primaryKey: true,
 },
   fullname: {

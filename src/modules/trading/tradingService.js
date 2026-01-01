@@ -1,5 +1,6 @@
 const Listing = require('../listing/listingModel.js');
 const Holdings = require('../holdings/holdingsModel.js');
+const IcrProject = require('../marketplace/models/icrProjects.js');
 const sequelize = require('../../config/database.js');
 const { withLogging } = require('../../utils/logger.js');
 
@@ -47,6 +48,72 @@ const buyCreditsService = async (listing_id, buyer_org_id, amount) => {
     }
 };
 
+const sellCreditsService = async (org_id, project_id, amount, price) => {
+  const t = await sequelize.transaction();
+  try {
+    // 1. Get seller holdings for this project
+    const holding = await Holdings.findOne({
+      where: { org_id, project_id },
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+    if (!holding) throw new Error('No holdings found for this project');
+    if (parseFloat(holding.credit_balance) < amount)
+      throw new Error('Insufficient credits to sell');
+
+    // Fetch project details from icrProjects
+    const project = await IcrProject.findByPk(project_id, { transaction: t });
+    if (!project) throw new Error('Project not found');
+
+    // Extract year from startDate for project_start_year
+    const startDate = project.startDate; // Assuming this is a Date or ISO string
+    const projectStartYear = new Date(startDate).getFullYear();
+
+    // Extract SDG numbers from otherBenefits
+    const sdg_numbers = project.otherBenefits.map(b => {
+      const match = b.title.match(/SDG (\d+):/);
+      return match ? parseInt(match[1]) : null;
+    }).filter(n => n !== null);
+
+    // 2. Move credits to locked_for_sale
+    holding.locked_for_sale = (parseFloat(holding.locked_for_sale || 0) + amount).toFixed(2);
+    await holding.save({ transaction: t });
+
+    // 3. Create listing with required fields from project
+    const listing = await Listing.create({
+      seller_id: org_id,
+      project_id,
+      credits_available: amount,
+      price_per_credit: price,
+      status: 'open',
+      project_name: project.fullName || project.shortDescription, // Use appropriate field if fullName is the name
+      project_start_year: projectStartYear,
+      registry: project.registry,
+      category: project.sector.title, // Assuming category is sector.title
+      location_city: project.city,
+      location_state: project.state,
+      location_country: project.countryCode, // Map to full name if needed, e.g., 'US' to 'United States'
+      thumbnail_url: project.thumbnail,
+      methodology: project.methodology.title,
+      sdg_numbers: sdg_numbers,
+      vintage_year: projectStartYear
+    }, { transaction: t });
+
+    await t.commit();
+
+    return {
+      success: true,
+      message: 'Listing created for sale',
+      listing_id: listing.listing_id,
+      locked_for_sale: holding.locked_for_sale
+    };
+  } catch (error) {
+    if (t) await t.rollback();
+    throw error; // Rethrow original error without wrapping
+  }
+};
+
 module.exports = {
     buyCreditsService: withLogging(buyCreditsService, 'buyCreditsService'),
+    sellCreditsService: withLogging(sellCreditsService, 'sellCreditsService')
 };

@@ -65,7 +65,7 @@ const Listing = sequelize.define('Listings', {
     },
     sdg_numbers: {
         type: DataTypes.JSON,
-        allowNull: true,
+        allowNull: false,
     },
     methodology: {
         type: DataTypes.STRING,
@@ -73,7 +73,7 @@ const Listing = sequelize.define('Listings', {
     },
     vintage_year: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        allowNull: false,
     },
 }, {
     tableName: 'Listings',

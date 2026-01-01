@@ -1,4 +1,4 @@
-const { buyCreditsService } = require('./tradingService'); // Adjust path if needed
+const { buyCreditsService, sellCreditsService } = require('./tradingService'); // Adjust path if needed
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
 
@@ -45,4 +45,53 @@ async function buyCreditsController(req, res, next) {
   }
 }
 
-module.exports = { buyCreditsController: withLogging(buyCreditsController, 'buyCreditsController') };
+async function sellCreditsController(req, res, next) {
+  try {
+    const { org_id, project_id, amount, price } = req.body || {};
+
+    // Basic HTTP-level check for required fields
+    if (!org_id || !project_id || !amount || !price) {
+      return res.error('Missing required fields', 400);
+    }
+
+    // Validate UUID format for org_id and project_id using uuid library
+    if (!uuidValidate(org_id)) {
+      return res.error('Invalid UUID format for org_id', 400);
+    }
+    if (!uuidValidate(project_id)) {
+      return res.error('Invalid UUID format for project_id', 400);
+    }
+
+    // Additional validation for amount and price
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.error('Amount must be a positive number', 400);
+    }
+    const parsedPrice = parseFloat(price);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      return res.error('Price must be a positive number', 400);
+    }
+
+    const result = await sellCreditsService(org_id, project_id, parsedAmount, parsedPrice);
+
+    // No sanitization needed; result is already safe
+    return res.status(201).success('Listing created successfully', result);
+  } catch (error) {
+    const statusMap = {
+      'No holdings found for this project': 404,
+      'Insufficient credits to sell': 400,
+      'Project not found': 404,
+      // Add more mappings as needed for other service errors
+    };
+
+    const status = statusMap[error.message] || 500;
+    if (status !== 500) {
+      return res.error(error.message, status);
+    }
+    next(error);  // Pass unexpected errors to global handler
+  }
+}
+module.exports = {
+  buyCreditsController: withLogging(buyCreditsController, 'buyCreditsController'),
+  sellCreditsController: withLogging(sellCreditsController, 'sellCreditsController')
+};

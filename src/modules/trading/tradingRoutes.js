@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { buyCreditsController } = require('./buyController'); // Adjust path if needed
-
+const { buyCreditsController, sellCreditsController } = require('./tradingController');
 // Route for buying credits
 router.post('/buy-credits', buyCreditsController);
+// Route for selling credits
+router.post('/sell-credits', sellCreditsController);
 
 module.exports = router;

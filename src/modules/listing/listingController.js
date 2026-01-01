@@ -63,35 +63,6 @@ const getAllListingsController = async (req, res) => {
   }
 };
 
-const getListingById = async (req, res) => {
-  try {
-    const { listing_id } = req.params;
-
-    // Validate listing_id as UUID
-    if (!listing_id || !uuidValidate(listing_id)) {
-      return res.status(400).json({ success: false, message: 'Invalid listing ID format (must be a valid UUID)' });
-    }
-
-    const listing = await listingService.getListingByIdService(listing_id);
-    if (!listing) {
-      return res.status(404).json({ success: false, message: 'Listing not found' });
-    }
-    return res.status(200).json({ success: true, message: 'Listing fetched successfully', data: listing });
-  } catch (error) {
-    const statusMap = {
-      'Failed to fetch listing by ID': 500,
-      // Add more as needed
-    };
-
-    const status = statusMap[error.message] || 500;
-    if (status !== 500) {
-      return res.status(status).json({ success: false, message: error.message });
-    }
-    console.error('Error fetching listing by ID:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
-
 module.exports = {
   createListingController: withLogging(createListingController, 'createListingController'),
   getAllListingsController: withLogging(getAllListingsController, 'getAllListingsController'),

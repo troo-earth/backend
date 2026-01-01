@@ -6,7 +6,6 @@ const SequelizeStoreInit = require('connect-session-sequelize');
 const sequelize = require('./config/database');
 
 const userRoutes = require('./modules/user/userRoutes');
-const sellerRoutes = require('./modules/seller/sellerRoutes');
 const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
 const orgUserRoutes = require('./modules/orgUser/orgUserRoutes');
@@ -113,7 +112,6 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/sellers', sellerRoutes);
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/org-users', orgUserRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);

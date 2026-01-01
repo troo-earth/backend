@@ -1,7 +1,7 @@
 const Listing = require('../listing/listingModel.js');
 const Holdings = require('../holdings/holdingsModel.js');
-const sequelize = require('../../config/database');
-const { withLogging } = require('../../utils/logger');
+const sequelize = require('../../config/database.js');
+const { withLogging } = require('../../utils/logger.js');
 
 const buyCreditsService = async (listing_id, buyer_org_id, amount) => {
     const t = await sequelize.transaction();
@@ -39,14 +39,11 @@ const buyCreditsService = async (listing_id, buyer_org_id, amount) => {
 
         await t.commit();
 
-        return {
-            success: true,
-            message: 'Purchase successful'
-        };
+        return {};
 
     } catch (error) {
         if (t) await t.rollback();
-        throw new Error(`Failed to buy credits: ${error.message}`);
+        throw new Error(error.message);
     }
 };
 

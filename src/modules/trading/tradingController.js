@@ -1,4 +1,4 @@
-const { buyCreditsService, sellCreditsService } = require('./tradingService'); // Adjust path if needed
+const { buyCreditsService, sellCreditsService, transferCreditsService } = require('./tradingService'); // Adjust path if needed
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
 
@@ -91,7 +91,55 @@ async function sellCreditsController(req, res, next) {
     next(error);  // Pass unexpected errors to global handler
   }
 }
+
+async function transferCreditsController(req, res, next) {
+  try {
+    const { from_org_id, to_org_id, project_id, amount } = req.body || {};
+
+    // Basic HTTP-level check for required fields
+    if (!from_org_id || !to_org_id || !project_id || !amount) {
+      return res.error('Missing required fields', 400);
+    }
+
+    // Validate UUID format for from_org_id, to_org_id, and project_id
+    if (!uuidValidate(from_org_id)) {
+      return res.error('Invalid UUID format for from_org_id', 400);
+    }
+    if (!uuidValidate(to_org_id)) {
+      return res.error('Invalid UUID format for to_org_id', 400);
+    }
+    if (!uuidValidate(project_id)) {
+      return res.error('Invalid UUID format for project_id', 400);
+    }
+
+    // Additional validation for amount
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.error('Amount must be a positive number', 400);
+    }
+
+    const result = await transferCreditsService(from_org_id, to_org_id, project_id, parsedAmount);
+
+    // No sanitization needed; result is already safe
+    return res.status(201).success('Transfer successful', result);
+  } catch (error) {
+    const statusMap = {
+      'Cannot transfer to the same organization': 400,
+      'Sender has no holdings': 404,
+      'Insufficient available credits to transfer': 400,
+      // Add more mappings as needed for other service errors
+    };
+
+    const status = statusMap[error.message] || 500;
+    if (status !== 500) {
+      return res.error(error.message, status);
+    }
+    next(error);  // Pass unexpected errors to global handler
+  }
+}
+
 module.exports = {
   buyCreditsController: withLogging(buyCreditsController, 'buyCreditsController'),
-  sellCreditsController: withLogging(sellCreditsController, 'sellCreditsController')
+  sellCreditsController: withLogging(sellCreditsController, 'sellCreditsController'),
+  transferCreditsController: withLogging(transferCreditsController, 'transferCreditsController')
 };

@@ -20,6 +20,26 @@ const buyCreditsService = async (listing_id, buyer_org_id, amount) => {
         if (listing.credits_available == 0) listing.status = 'closed';
         await listing.save({ transaction: t });
 
+        // Step 2.5: Reduce seller holdings if this is an org-owned listing
+        if (listing.seller_id) {
+            const sellerHoldings = await Holdings.findOne({
+                where: { org_id: listing.seller_id, project_id: listing.project_id },
+                transaction: t,
+                lock: t.LOCK.UPDATE
+            });
+            if (!sellerHoldings) {
+                throw new Error('Seller holdings not found');
+            }
+            if (parseFloat(sellerHoldings.locked_for_sale) < amount) {
+                throw new Error('Seller does not have enough locked credits');
+            }
+            sellerHoldings.locked_for_sale =
+                (parseFloat(sellerHoldings.locked_for_sale) - amount).toFixed(2);
+            sellerHoldings.credit_balance =
+                (parseFloat(sellerHoldings.credit_balance) - amount).toFixed(2);
+            await sellerHoldings.save({ transaction: t });
+        }
+
         // Step 3: Add credits to buyer holdings
         let buyerHoldings = await Holdings.findOne({
             where: { org_id: buyer_org_id, project_id: listing.project_id },
@@ -61,7 +81,7 @@ const sellCreditsService = async (org_id, project_id, amount, price) => {
     if (parseFloat(holding.credit_balance) < amount)
       throw new Error('Insufficient credits to sell');
 
-    // Fetch project details from icrProjects
+    // Fetch project details from icrProject
     const project = await IcrProject.findByPk(project_id, { transaction: t });
     if (!project) throw new Error('Project not found');
 
@@ -74,6 +94,32 @@ const sellCreditsService = async (org_id, project_id, amount, price) => {
       const match = b.title.match(/SDG (\d+):/);
       return match ? parseInt(match[1]) : null;
     }).filter(n => n !== null);
+
+    // Check if similar listing already exists
+    const existingListing = await Listing.findOne({
+      where: {
+        seller_id: org_id,
+        project_id,
+        price_per_credit: price,
+        status: 'open'
+      },
+      transaction: t
+    });
+    if (existingListing) {
+      // Increase available credits instead of creating new listing
+      existingListing.credits_available =
+          (parseFloat(existingListing.credits_available) + amount).toFixed(2);
+      await existingListing.save({ transaction: t });
+      holding.locked_for_sale = (parseFloat(holding.locked_for_sale || 0) + amount).toFixed(2);
+      await holding.save({ transaction: t });
+      await t.commit();
+      return {
+        success: true,
+        message: 'Listing updated (merged with existing open listing)',
+        listing_id: existingListing.listing_id,
+        total_available: existingListing.credits_available
+      };
+    }
 
     // 2. Move credits to locked_for_sale
     holding.locked_for_sale = (parseFloat(holding.locked_for_sale || 0) + amount).toFixed(2);
@@ -94,9 +140,9 @@ const sellCreditsService = async (org_id, project_id, amount, price) => {
       location_state: project.state,
       location_country: project.countryCode, // Map to full name if needed, e.g., 'US' to 'United States'
       thumbnail_url: project.thumbnail,
-      methodology: project.methodology.title,
-      sdg_numbers: sdg_numbers,
-      vintage_year: projectStartYear
+      methodology: project.methodology.title || project.methodology.id,
+      vintage_year: projectStartYear,
+      sdg_numbers: sdg_numbers // Now as array; assume model field is ARRAY type
     }, { transaction: t });
 
     await t.commit();

@@ -1,8 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const session = require('express-session');
-let MemoryStore = require('express-session').MemoryStore;
-const SequelizeStoreInit = require('connect-session-sequelize');
 const sequelize = require('./config/database');
 
 const userRoutes = require('./modules/user/userRoutes');
@@ -17,12 +14,11 @@ const tradingRoutes = require('./modules/trading/tradingRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
 const globalRouteLogger = require('./middleware/routeLogger');
+const sessionMiddleware = require('./config/session');
 const { tracingMiddleware } = require('./middleware/tracingMiddleware');
 
 const app = express();
 const cors = require('cors');
-
-const SequelizeStore = SequelizeStoreInit(session.Store);
 
 // Middleware (same as before)
 app.use(express.json());
@@ -55,38 +51,10 @@ app.use((req, res, next) => {
   })(req, res, next);
 });
 
-let sessionStore;
-
-if (process.env.VERCEL) {
-  // On Vercel: Use memory store (sessions won't persist across instances)
-  sessionStore = new MemoryStore();
-  console.warn('⚠️  Running on Vercel – using MemoryStore for sessions (short-lived)');
-} else {
-  // Locally: Keep your DB store
-  const SequelizeStore = SequelizeStoreInit(session.Store);
-  sessionStore = new SequelizeStore({
-    db: sequelize,
-    tableName: 'Sessions',
-  });
-}
-
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'troo-earth-super-secret-2025',
-  store: sessionStore,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production', // true on Vercel production
-    httpOnly: true,
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    sameSite: 'lax',
-  },
-}));
-
+app.use(sessionMiddleware);
 app.use(responseFormatter);
 app.use(tracingMiddleware);
 app.use(globalRouteLogger);
-app.use(errorHandler);
 
 app.use((req, res, next) => {
   res.locals.user = req.session.user || null;
@@ -117,6 +85,8 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/listings', listingRoutes);
 app.use('/api/v1/holdings', holdingsRoutes);
 app.use('/api/v1/trading', tradingRoutes);
+
+app.use(errorHandler);
 
 // Conditional listen ONLY for local development
 // Only start the server when running locally (not on Vercel)

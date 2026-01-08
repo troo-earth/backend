@@ -60,6 +60,15 @@ const buyCreditsService = async (listing_id, buyer_org_id, amount) => {
             await buyerHoldings.save({ transaction: t });
         }
 
+        await Transactions.create({
+            type: 'buy',
+            from_org_id: listing.seller_id || "Registry",
+            to_org_id: buyer_org_id,
+            project_id: listing.project_id,
+            amount,
+            related_listing_id: listing.listing_id
+        }, { transaction: t });
+
         await t.commit();
 
         return {};
@@ -213,6 +222,14 @@ const transferCreditsService = async (
             await receiver.save({ transaction: t });
         }
 
+        await Transactions.create({
+            type: 'transfer',
+            from_org_id: from_org_id,
+            to_org_id: to_org_id,
+            project_id,
+            amount
+        }, { transaction: t });
+
         await t.commit();
 
         return {
@@ -228,71 +245,71 @@ const transferCreditsService = async (
 };
 
 const retireCreditsService = async (
-  org_id,
-  project_id,
-  amount,
-  purpose,
-  beneficiary
+    org_id,
+    project_id,
+    amount,
+    purpose,
+    beneficiary
 ) => {
-  const t = await sequelize.transaction();
+    const t = await sequelize.transaction();
 
-  try {
-    // 1. Fetch holdings (lock row)
-    const holding = await Holdings.findOne({
-      where: { org_id, project_id },
-      transaction: t,
-      lock: t.LOCK.UPDATE
-    });
+    try {
+        // 1. Fetch holdings (lock row)
+        const holding = await Holdings.findOne({
+            where: { org_id, project_id },
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
 
-    if (!holding) throw new Error('No holdings found');
+        if (!holding) throw new Error('No holdings found');
 
-    const available =
-      parseFloat(holding.credit_balance) -
-      parseFloat(holding.locked_for_sale);
+        const available =
+            parseFloat(holding.credit_balance) -
+            parseFloat(holding.locked_for_sale);
 
-    if (available < amount)
-      throw new Error('Insufficient available credits to retire');
+        if (available < amount)
+            throw new Error('Insufficient available credits to retire');
 
-    // 2. Burn credits
-    holding.credit_balance =
-      (parseFloat(holding.credit_balance) - amount).toFixed(2);
+        // 2. Burn credits
+        holding.credit_balance =
+            (parseFloat(holding.credit_balance) - amount).toFixed(2);
 
-    await holding.save({ transaction: t });
+        await holding.save({ transaction: t });
 
-    // 3. Create transaction (credit ledger)
-    const tx = await Transactions.create({
-      type: 'retire',
-      from_org_id: org_id,
-      to_org_id: null,
-      project_id,
-      amount
-    }, { transaction: t });
+        // 3. Create transaction (credit ledger)
+        const tx = await Transactions.create({
+            type: 'retire',
+            from_org_id: org_id,
+            to_org_id: null,
+            project_id,
+            amount
+        }, { transaction: t });
 
-    // 4. Create retirement certificate
-    const certificate = await RetirementCertificate.create({
-      org_id,
-      project_id,
-      amount,
-      retired_at: new Date(),
-      purpose,
-      beneficiary,
-      transaction_id: tx.tx_id,
-      certificate_number: `CERT-${Date.now()}`
-    }, { transaction: t });
+        // 4. Create retirement certificate
+        const certificate = await RetirementCertificate.create({
+            org_id,
+            project_id,
+            amount,
+            retired_at: new Date(),
+            purpose,
+            beneficiary,
+            transaction_id: tx.tx_id,
+            certificate_number: `CERT-${Date.now()}`
+        }, { transaction: t });
 
-    await t.commit();
+        await t.commit();
 
-    return {
-      message: 'Credits retired successfully',
-      certificate_id: certificate.certificate_id,
-      certificate_number: certificate.certificate_number,
-      retired_amount: amount
-    };
+        return {
+            message: 'Credits retired successfully',
+            certificate_id: certificate.certificate_id,
+            certificate_number: certificate.certificate_number,
+            retired_amount: amount
+        };
 
-  } catch (error) {
-    await t.rollback();
-    throw error;
-  }
+    } catch (error) {
+        await t.rollback();
+        throw error;
+    }
 };
 
 module.exports = {

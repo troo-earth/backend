@@ -1,5 +1,4 @@
 const Org = require('./orgModel');
-const OrgUser = require('../orgUser/orgUserModel');
 const User = require('../user/userModel');
 
 async function createOrg({ org_name }) {
@@ -25,10 +24,10 @@ async function getOrgById(org_id) {
   if (!org) return null;
 
 
-  const orgUsers = await OrgUser.findAll({
-    where: { org_id },
-    attributes: ['org_user_id', 'org_id', 'user_id', 'email', 'role', 'createdAt'],
-  });
+  // const orgUsers = await OrgUser.findAll({
+  //   where: { org_id },
+  //   attributes: ['org_user_id', 'org_id', 'user_id', 'email', 'role', 'createdAt'],
+  // });
 
   const userIds = orgUsers.map(u => u.user_id).filter(Boolean);
 

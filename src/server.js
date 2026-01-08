@@ -8,8 +8,6 @@ const sequelize = require('./config/database');
 const userRoutes = require('./modules/user/userRoutes');
 const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
-const orgUserRoutes = require('./modules/orgUser/orgUserRoutes');
-const buyerRoutes = require('./modules/buyer/buyerRoutes');
 const paymentRoutes = require('./modules/payments/paymentRoutes');
 const authRoutes = require('./modules/auth/authRoutes');
 const listingRoutes = require('./modules/listing/listingRoutes');
@@ -113,9 +111,7 @@ app.get('/health', async (req, res) => {
 
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/orgs', orgRoutes);
-app.use('/api/v1/org-users', orgUserRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
-app.use('/api/v1/buyer', buyerRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/listings', listingRoutes);

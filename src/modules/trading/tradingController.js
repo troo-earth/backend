@@ -1,4 +1,4 @@
-const { buyCreditsService, sellCreditsService, transferCreditsService } = require('./tradingService'); // Adjust path if needed
+const { buyCreditsService, sellCreditsService, transferCreditsService, retireCreditsService } = require('./tradingService'); // Adjust path if needed
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
 
@@ -138,8 +138,42 @@ async function transferCreditsController(req, res, next) {
   }
 }
 
+const retireCreditsController = async (req, res) => {
+  try {
+    const {
+      org_id,
+      project_id,
+      amount,
+      purpose,
+      beneficiary
+    } = req.body;
+
+    if (!org_id || !project_id || !amount) {
+      return res.error('org_id, project_id and amount are required', 400);
+    }
+
+    if (amount <= 0) {
+      return res.error('Amount must be a positive number', 400);
+    }
+
+    const result = await retireCreditsService(
+      org_id,
+      project_id,
+      amount,
+      purpose,
+      beneficiary
+    );
+
+    return res.success('Credits retired successfully', result);
+
+  } catch (error) {
+    return res.error(error.message, 400);
+  }
+};
+
 module.exports = {
   buyCreditsController: withLogging(buyCreditsController, 'buyCreditsController'),
   sellCreditsController: withLogging(sellCreditsController, 'sellCreditsController'),
-  transferCreditsController: withLogging(transferCreditsController, 'transferCreditsController')
+  transferCreditsController: withLogging(transferCreditsController, 'transferCreditsController'),
+  retireCreditsController: withLogging(retireCreditsController, 'retireCreditsController')
 };

@@ -283,7 +283,6 @@ const retireCreditsService = async (
     await t.commit();
 
     return {
-      success: true,
       message: 'Credits retired successfully',
       certificate_id: certificate.certificate_id,
       certificate_number: certificate.certificate_number,

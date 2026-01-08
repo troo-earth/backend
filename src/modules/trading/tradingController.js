@@ -138,7 +138,7 @@ async function transferCreditsController(req, res, next) {
   }
 }
 
-const retireCredits = async (req, res) => {
+const retireCreditsController = async (req, res) => {
   try {
     const {
       org_id,
@@ -149,17 +149,11 @@ const retireCredits = async (req, res) => {
     } = req.body;
 
     if (!org_id || !project_id || !amount) {
-      return res.status(400).json({
-        success: false,
-        message: 'org_id, project_id and amount are required'
-      });
+      return res.error('org_id, project_id and amount are required', 400);
     }
 
     if (amount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'amount must be greater than zero'
-      });
+      return res.error('Amount must be a positive number', 400);
     }
 
     const result = await retireCreditsService(
@@ -170,13 +164,10 @@ const retireCredits = async (req, res) => {
       beneficiary
     );
 
-    return res.status(200).json(result);
+    return res.success('Credits retired successfully', result);
 
   } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return res.error(error.message, 400);
   }
 };
 
@@ -184,5 +175,5 @@ module.exports = {
   buyCreditsController: withLogging(buyCreditsController, 'buyCreditsController'),
   sellCreditsController: withLogging(sellCreditsController, 'sellCreditsController'),
   transferCreditsController: withLogging(transferCreditsController, 'transferCreditsController'),
-  retireCreditsController: withLogging(retireCredits, 'retireCreditsController')
+  retireCreditsController: withLogging(retireCreditsController, 'retireCreditsController')
 };

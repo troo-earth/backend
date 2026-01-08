@@ -1,10 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const { buyCreditsController, sellCreditsController, transferCreditsController } = require('./tradingController');
+const {
+    buyCreditsController,
+    sellCreditsController,
+    transferCreditsController,
+    retireCreditsController
+} = require('./tradingController');
+
 // Route for buying credits
 router.post('/buy-credits', buyCreditsController);
 // Route for selling credits
 router.post('/sell-credits', sellCreditsController);
+// Route for retiring credits
+router.post('/retire-credits', retireCreditsController);
 // Route for transferring credits
 router.post('/transfer-credits', transferCreditsController);
 

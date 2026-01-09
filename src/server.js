@@ -48,6 +48,7 @@ app.use((req, res, next) => {
       }
     },
     credentials: true,
+    allowedHeaders: ['Content-Type', 'dev-password'],
   })(req, res, next);
 });
 

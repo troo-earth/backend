@@ -23,18 +23,20 @@ async function loginUserService({ email, password }) {
   return user;
 }
 
-// Verify current session user - just returns the session user or throws
 async function verifyUserService(sessionUser) {
-  if (!sessionUser || !sessionUser.id) {
+  if (!sessionUser || !sessionUser.user_id) {
     throw new Error('Not authenticated');
   }
-  // Optionally: you could re-fetch fresh user from DB here if you want up-to-date data
+
   return {
-    id: sessionUser.id,
+    user_id: sessionUser.user_id,
     email: sessionUser.email,
-    name: sessionUser.name,
+    fullname: sessionUser.fullname,
+    // role: sessionUser.role,
+    // org_id: sessionUser.org_id
   };
 }
+
 
 // Logout - no DB logic needed, but keeps symmetry
 async function logoutUserService() {

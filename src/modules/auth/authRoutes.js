@@ -7,8 +7,8 @@ const {
 
 const router = express.Router();
 
-router.post('/login', loginUserController);              // Public
-router.get('/verify', verifyUserController); // Protected
-router.delete('/logout', logoutUserController); // Protected
+router.post('/login', loginUserController);      
+router.get('/me', verifyUserController);
+router.delete('/logout', logoutUserController);
 
 module.exports = router;

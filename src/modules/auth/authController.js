@@ -12,21 +12,24 @@ async function loginUserController(req, res, next) {
     // Call the service to authenticate and get the user
     const user = await loginUserService({ email, password });
 
-    console.log('Login successful for user:', { id: user.user_id, email: user.email });
+    // IMPORTANT: rotate session ID
+    req.session.regenerate((err) => {
+      if (err) return next(err);
 
-    // Set session data
-    req.session.user = {
-      id: user.user_id,
-      email: user.email,
-      name: user.user_name,
-    };
+      // Attach identity to session
+      req.session.user = {
+        user_id: user.user_id,
+        fullname: user.fullname,
+        email: user.email,
+        //role: user.role,        // future RBAC
+        //org_id: user.org_id     // if applicable
+      };
 
-    await req.session.save();
-
-    // Respond with success
-    return res.success('Login successful', {
-      user: req.session.user,
+      return res.success('Login successful', {
+        user: req.session.user
+      });
     });
+
 
   } catch (error) {
     // Specific handling for authentication errors
@@ -54,23 +57,33 @@ async function verifyUserController(req, res, next) {
 }
 
 async function logoutUserController(req, res, next) {
-  try {
-    await logoutUserService(); // keeps pattern consistent
 
-    if (!req.session || !req.session.user) {
-      return res.success('Logged Out');
+  await logoutUserService(); // currently a no-op, but keeps symmetry
+  try {
+    if (!req.session) {
+      return res.success('Logged out');
     }
 
     req.session.destroy((err) => {
       if (err) return next(err);
-      res.clearCookie('connect.sid');
-      return res.success('Logged out and Session Cleared Successfully');
+
+      res.clearCookie('troo.sid', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        domain: process.env.NODE_ENV === 'production'
+          ? '.troo.earth'
+          : undefined,
+      });
+
+      return res.success('Logged out successfully');
     });
 
   } catch (error) {
     next(error);
   }
 }
+
 
 module.exports = {
   loginUserController: withLogging(loginUserController, 'loginUserController'),

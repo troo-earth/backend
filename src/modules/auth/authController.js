@@ -47,6 +47,7 @@ async function loginUserController(req, res, next) {
 async function verifyUserController(req, res, next) {
   try {
     const user = await verifyUserService(req.session.user);
+
     return res.success('Authenticated', { user });
   } catch (error) {
     if (error.message === 'Not authenticated') {

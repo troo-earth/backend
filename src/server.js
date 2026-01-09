@@ -51,6 +51,7 @@ app.use((req, res, next) => {
   })(req, res, next);
 });
 
+app.set('trust proxy', 1);
 app.use(sessionMiddleware);
 app.use(responseFormatter);
 app.use(tracingMiddleware);

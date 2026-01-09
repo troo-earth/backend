@@ -3,10 +3,6 @@ const { RedisStore } = require('connect-redis');
 const redisClient = require('./redis');
 
 const isProd = process.env.NODE_ENV === 'production';
-const allowCrossSiteDev = process.env.ALLOW_CROSS_SITE_DEV === 'true';
-
-const sameSite =
-  allowCrossSiteDev ? 'none' : 'lax';
 
 const sessionMiddleware = session({
   name: 'troo.sid',
@@ -17,20 +13,15 @@ const sessionMiddleware = session({
   }),
 
   secret: process.env.SESSION_SECRET,
-
   resave: false,
   saveUninitialized: false,
 
   cookie: {
     httpOnly: true,
-
-    secure: isProd || allowCrossSiteDev, // must be true for SameSite=None
-
-    sameSite,
-
-    domain: isProd ? '.troo.earth' : undefined,
-
-    maxAge: 1000 * 60 * 60 * 24,
+    secure: true,        // REQUIRED for SameSite=None
+    sameSite: 'none',    // REQUIRED for localhost → api.troo.earth
+    domain: '.troo.earth',
+    maxAge: 1000 * 60 * 60 * 24
   },
 });
 

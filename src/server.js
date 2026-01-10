@@ -33,6 +33,11 @@ app.use((req, res, next) => {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
 
+      // Allow preflight (OPTIONS) for localhost in dev without dev-password
+      if (req.method === 'OPTIONS' && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
+        return callback(null, true);
+      }
+
       // Priority: Check suffix first
       if (origin.toLowerCase().endsWith(allowedSuffix)) {
         return callback(null, true);

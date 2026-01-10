@@ -78,71 +78,99 @@ async function createUserService({ user_name, email, password, fullname }) {
 
 async function updateUserService(user_id, updateFields) {
   if (!user_id) throw new Error('Missing user ID');
-  if (!updateFields || Object.keys(updateFields).length === 0) throw new Error('Missing update fields');
+  if (!updateFields || Object.keys(updateFields).length === 0)
+    throw new Error('Missing update fields');
 
-  const allowedFields = ['user_name', 'email', 'password', 'fullname'];
-  const validUpdateFields = Object.keys(updateFields).filter(f => allowedFields.includes(f));
-  if (validUpdateFields.length === 0) throw new Error('No valid update fields provided');
+  // ✅ FIXED allowed fields
+  const allowedFields = ['user_name', 'email', 'password', 'fullname', 'org_id'];
+  const validUpdateFields = Object.keys(updateFields).filter(f =>
+    allowedFields.includes(f)
+  );
 
-  // Validate and sanitize individual fields
+  if (validUpdateFields.length === 0)
+    throw new Error('No valid update fields provided');
+
+  // --- Email ---
   if (updateFields.email) {
     if (!isValidEmail(updateFields.email)) {
       throw new Error('Invalid email format');
     }
-    updateFields.email = updateFields.email.trim().toLowerCase();  // Normalize email
+    updateFields.email = updateFields.email.trim().toLowerCase();
   }
 
-  if (updateFields.password && !isValidPassword(updateFields.password)) {
-    throw new Error('Invalid password format');
-  }
-
-  if (updateFields.fullname) {
-    if (typeof updateFields.fullname !== 'string' || updateFields.fullname.trim() === '') {
-      throw new Error('Full name must be a non-empty string');
-    }
-    const nameRegex = /^[A-Za-z\s\-']+$/;
-    if (!nameRegex.test(updateFields.fullname.trim())) {
-      throw new Error('Full name contains invalid characters');
-    }
-    updateFields.fullname = updateFields.fullname
-      .trim()
-      .toLowerCase()
-      .replace(/\b\w/g, char => char.toUpperCase())
-      .replace(/\s+/g, ' ');  // Title Case
-  }
-
-  if (updateFields.user_name) {
-    updateFields.user_name = updateFields.user_name.trim();
-  }
-
-  // Hash password if updating
+  // --- Password ---
   if (updateFields.password) {
+    if (!isValidPassword(updateFields.password)) {
+      throw new Error('Invalid password format');
+    }
     updateFields.password_hash = await bcrypt.hash(updateFields.password, 10);
     delete updateFields.password;
   }
 
-  // Perform update based solely on user_id (no uniqueness checks)
-  const [updatedCount] = await User.update(updateFields, { where: { user_id } });
+  // --- Full name ---
+  if (updateFields.fullname) {
+    if (typeof updateFields.fullname !== 'string' || !updateFields.fullname.trim()) {
+      throw new Error('Full name must be a non-empty string');
+    }
+
+    const nameRegex = /^[A-Za-z\s\-']+$/;
+    if (!nameRegex.test(updateFields.fullname.trim())) {
+      throw new Error('Full name contains invalid characters');
+    }
+
+    updateFields.fullname = updateFields.fullname
+      .trim()
+      .toLowerCase()
+      .replace(/\b\w/g, c => c.toUpperCase())
+      .replace(/\s+/g, ' ');
+  }
+
+  // --- Username ---
+  if (updateFields.user_name) {
+    updateFields.user_name = updateFields.user_name.trim();
+  }
+
+  // --- org_id (NEW) ---
+  if (updateFields.org_id !== undefined) {
+    if (updateFields.org_id === null) {
+      updateFields.org_id = null; // allow unassign
+    } else {
+      if (!isValidUUID(updateFields.org_id)) {
+        throw new Error('Invalid org_id');
+      }
+    }
+  }
+
+  // --- Update ---
+  const [updatedCount] = await User.update(updateFields, {
+    where: { user_id }
+  });
+
   if (updatedCount === 0) throw new Error('User not found');
 
   const updatedUser = await User.findByPk(user_id);
 
-  // Send update confirmation email (non-blocking)
-  // If fullname not in request, use from DB; else use updated one (already in updatedUser)
-  const nameForEmail = updateFields.fullname || updatedUser.fullname || updatedUser.user_name;
+  // --- Email notification (non-blocking) ---
+  const nameForEmail =
+    updateFields.fullname || updatedUser.fullname || updatedUser.user_name;
+
   const firstName = nameForEmail.split(' ')[0];
   const html = accountUpdatedTemplate({ user_name: firstName });
+
   sendEmail({
     to: updatedUser.email,
     subject: 'Your troo.earth Account Was Updated',
     html,
-  }).catch((error) => {
-    console.error(`Failed to send update email to ${updatedUser.email}:`, error.message);
-    // Optionally, queue for retry or log to monitoring service
+  }).catch(err => {
+    console.error(
+      `Failed to send update email to ${updatedUser.email}:`,
+      err.message
+    );
   });
 
   return updatedUser;
-} 
+}
+
 
 async function viewUserService(user_id) {
   if (!user_id) throw new Error('Missing user ID');

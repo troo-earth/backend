@@ -1,9 +1,17 @@
-const express = require('express');
-const { createOrgController, getOrgController } = require('./orgController');
+const router = require('express').Router();
+const {
+  createOrgController,
+  getOrgByIdController,
+  updateOrgController,
+} = require('./orgController');
 
-const router = express.Router();
+// Create organization
+router.post('/create-org', createOrgController);
 
-router.post('/create', createOrgController);
-router.get('/:org_id', getOrgController);
+// Get organization by ID
+router.get('/view-org/:id', getOrgByIdController);
+
+// Update organization
+router.patch('/update-org/:id', updateOrgController);
 
 module.exports = router;

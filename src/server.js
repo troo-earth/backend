@@ -10,11 +10,13 @@ const authRoutes = require('./modules/auth/authRoutes');
 const listingRoutes = require('./modules/listing/listingRoutes');
 const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
 const tradingRoutes = require('./modules/trading/tradingRoutes');
+const uploadRoutes = require('./modules/uploads/uploadRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
 const globalRouteLogger = require('./middleware/routeLogger');
 const sessionMiddleware = require('./config/session');
+const authMiddelware = require('./middleware/authMiddleware');
 const { tracingMiddleware } = require('./middleware/tracingMiddleware');
 
 const app = express();
@@ -84,14 +86,18 @@ app.get('/health', async (req, res) => {
   }
 });
 
+app.use('/api/v1/auth', authRoutes);
+
+//app.use(authMiddelware); // Uncomment this line to enable authentication for all routes below
+
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
 app.use('/api/v1/payments', paymentRoutes);
-app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/listings', listingRoutes);
 app.use('/api/v1/holdings', holdingsRoutes);
 app.use('/api/v1/trading', tradingRoutes);
+app.use('/api/v1/uploads', uploadRoutes);
 
 app.use(errorHandler);
 

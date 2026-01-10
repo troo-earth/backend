@@ -24,6 +24,10 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  org_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+  },
 }, {
   tableName: 'Users',
   timestamps: true,

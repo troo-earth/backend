@@ -7,8 +7,8 @@ const {
 
 const router = express.Router();
 
-router.post('/create-user', createUserController);       // Public (registration)
-router.put('/update-user/:id', updateUserController);     // Protected
-router.get('/view-user/:id', viewUserController);         // Protected
+router.post('/create-user', createUserController);       
+router.put('/update-user/:id', updateUserController);     
+router.get('/view-user/:id', viewUserController);        
 
 module.exports = router;

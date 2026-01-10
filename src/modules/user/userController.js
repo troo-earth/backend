@@ -41,16 +41,26 @@ async function updateUserController(req, res, next) {
     const user_id = req.params.id;
     const updateFields = req.body || {};
 
-    // Validate user_id as UUID
-    if (!user_id || !uuidValidate(user_id)) {  // Or regex: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user_id)
-      return res.status(400).json({ success: false, message: 'Invalid user ID format (must be a valid UUID)' });
+    // Validate user_id
+    if (!user_id || !uuidValidate(user_id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID format (must be a valid UUID)',
+      });
     }
+
     const user = await updateUserService(user_id, updateFields);
 
     // Sanitize response
-    const { password_hash, ...safeUser } = user.toJSON ? user.toJSON() : user;
+    const { password_hash, ...safeUser } =
+      user.toJSON ? user.toJSON() : user;
 
-    return res.status(200).json({ success: true, message: 'User updated successfully', data: safeUser });
+    return res.status(200).json({
+      success: true,
+      message: 'User updated successfully',
+      data: safeUser,
+    });
+
   } catch (error) {
     const statusMap = {
       'Missing user ID': 400,
@@ -58,6 +68,7 @@ async function updateUserController(req, res, next) {
       'No valid update fields provided': 400,
       'Invalid email format': 400,
       'Invalid password format': 400,
+      'Invalid org_id': 400,              // ✅ NEW
       'Email already registered': 409,
       'Username already registered': 409,
       'Full name must be a non-empty string': 400,
@@ -66,9 +77,14 @@ async function updateUserController(req, res, next) {
     };
 
     const status = statusMap[error.message] || 500;
+
     if (status !== 500) {
-      return res.status(status).json({ success: false, message: error.message });
+      return res.status(status).json({
+        success: false,
+        message: error.message,
+      });
     }
+
     next(error);
   }
 }

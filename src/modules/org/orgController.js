@@ -1,45 +1,107 @@
-const { createOrg, getOrgById } = require("./orgService");
-const { withLogging } = require("../../utils/logger");
+const {
+  createOrgService,
+  getOrgByIdService,
+  updateOrgService,
+} = require('./orgService');
+const { withLogging } = require('../../utils/logger');
 
 async function createOrgController(req, res, next) {
   try {
-    const { org_name } = req.body;
+    const org = await createOrgService(req.body);
 
-    if (!org_name) {
-      return res.error("Missing organization name", 400);
-    }
-
-    const org = await createOrg({ org_name });
-    return res.success("Organization created successfully", org);
+    return res.status(201).json({
+      success: true,
+      message: 'Organization created successfully',
+      data: org,
+    });
   } catch (error) {
-    if (error.message === "Organization already exists") {
-      return res.error(error.message, 409);
+    const statusMap = {
+      'org_name and country_code are required': 400,
+    };
+
+    const status = statusMap[error.message] || 500;
+
+    if (status !== 500) {
+      return res.status(status).json({
+        success: false,
+        message: error.message,
+      });
     }
+
     next(error);
   }
 }
 
-async function getOrgController(req, res, next) {
+/**
+ * Get organization by ID
+ */
+async function getOrgByIdController(req, res, next) {
   try {
-    const { org_id } = req.params;
+    const { id: org_id } = req.params;
 
-    if (!org_id) {
-      return res.error("Organization ID is required", 400);
-    }
+    const org = await getOrgByIdService(org_id);
 
-    const org = await getOrgById(org_id);
-
-    if (!org) {
-      return res.error("Organization not found", 404);
-    }
-
-    return res.success("Organization fetched successfully", org);
+    return res.status(200).json({
+      success: true,
+      data: org,
+    });
   } catch (error) {
+    const statusMap = {
+      'Missing org_id': 400,
+      'Org not found': 404,
+    };
+
+    const status = statusMap[error.message] || 500;
+
+    if (status !== 500) {
+      return res.status(status).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    next(error);
+  }
+}
+
+/**
+ * Update organization
+ */
+async function updateOrgController(req, res, next) {
+  try {
+    const { id: org_id } = req.params;
+    const updateFields = req.body || {};
+
+    const org = await updateOrgService(org_id, updateFields);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Organization updated successfully',
+      data: org,
+    });
+  } catch (error) {
+    const statusMap = {
+      'Missing org_id': 400,
+      'No update fields provided': 400,
+      'No valid fields to update': 400,
+      'Org not found': 404,
+    };
+
+    const status = statusMap[error.message] || 500;
+
+    if (status !== 500) {
+      return res.status(status).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     next(error);
   }
 }
 
 module.exports = {
-  createOrgController: withLogging(createOrgController, "createOrgController"),
-  getOrgController: withLogging(getOrgController, "getOrgController"),
+  createOrgController: withLogging(createOrgController, 'createOrgController'),
+  getOrgByIdController: withLogging(getOrgByIdController, 'getOrgByIdController'),
+  updateOrgController: withLogging(updateOrgController, 'updateOrgController'),
 };

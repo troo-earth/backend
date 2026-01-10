@@ -1,71 +1,82 @@
 const Org = require('./orgModel');
-const User = require('../user/userModel');
+const { withLogging } = require('../../utils/logger');
 
-async function createOrg({ org_name }) {
-  if (!org_name || org_name.trim() === '') {
-    throw new Error('Organization name is required');
+async function createOrgService(payload) {
+  const {
+    org_name,
+    country_code,
+    registration_id,
+    logo_url,
+    incorporation_doc_url,
+  } = payload;
+
+  if (!org_name || !country_code) {
+    throw new Error('org_name and country_code are required');
   }
 
-  const existing = await Org.findOne({ where: { org_name } });
-  if (existing) {
-    throw new Error('Organization already exists');
-  }
-
-  return await Org.create({ org_name });
-}
-async function getOrgById(org_id) {
-  // 1️⃣ Validate input
-  if (!org_id) throw new Error('Organization ID is required');
-
-  // 2️⃣ Fetch organization info
-  const org = await Org.findByPk(org_id, {
-    attributes: ['org_id', 'org_name', 'createdAt', 'updatedAt'],
-  });
-  if (!org) return null;
-
-
-  // const orgUsers = await OrgUser.findAll({
-  //   where: { org_id },
-  //   attributes: ['org_user_id', 'org_id', 'user_id', 'email', 'role', 'createdAt'],
-  // });
-
-  const userIds = orgUsers.map(u => u.user_id).filter(Boolean);
-
-  
-  let users = [];
-  if (userIds.length > 0) {
-    users = await User.findAll({
-      where: { user_id: userIds },
-      attributes: ['user_id', 'user_name', 'email'],
-    });
-  }
-
- 
-  const members = orgUsers.map(row => {
-    const matchedUser = users.find(u => u.user_id === row.user_id);
-    return {
-      org_user_id: row.org_user_id,
-      user_id: row.user_id,
-      email: matchedUser ? matchedUser.email : row.email, 
-      user_name: matchedUser ? matchedUser.user_name : '(invited user)',
-      role: row.role || '—',
-      status: !row.user_id
-        ? 'pending'
-        : row.user_id && !row.role
-        ? 'registered'
-        : 'active',
-    };
+  const org = await Org.create({
+    org_name: org_name.trim(),
+    country_code: country_code.toUpperCase(),
+    registration_id,
+    logo_url,
+    incorporation_doc_url,
   });
 
-  
-  return {
-    org_id: org.org_id,
-    org_name: org.org_name,
-    createdAt: org.createdAt,
-    updatedAt: org.updatedAt,
-    memberCount: members.length,
-    members,
-  };
+  return org;
 }
 
-module.exports = { createOrg, getOrgById };
+/**
+ * Get org by ID
+ */
+async function getOrgByIdService(org_id) {
+  if (!org_id) throw new Error('Missing org_id');
+
+  const org = await Org.findByPk(org_id);
+  if (!org) throw new Error('Org not found');
+
+  return org;
+}
+
+/**
+ * Update org details
+ */
+async function updateOrgService(org_id, updateFields) {
+  if (!org_id) throw new Error('Missing org_id');
+  if (!updateFields || Object.keys(updateFields).length === 0) {
+    throw new Error('No update fields provided');
+  }
+
+  const allowedFields = [
+    'org_name',
+    'country_code',
+    'registration_id',
+    'logo_url',
+    'incorporation_doc_url',
+  ];
+
+  const validUpdates = {};
+  for (const key of allowedFields) {
+    if (updateFields[key] !== undefined) {
+      validUpdates[key] = updateFields[key];
+    }
+  }
+
+  if (Object.keys(validUpdates).length === 0) {
+    throw new Error('No valid fields to update');
+  }
+
+  const [updatedCount] = await Org.update(validUpdates, {
+    where: { org_id },
+  });
+
+  if (updatedCount === 0) throw new Error('Org not found');
+
+  const updatedOrg = await Org.findByPk(org_id);
+  return updatedOrg;
+}
+
+module.exports = {
+  createOrgService: withLogging(createOrgService, 'createOrgService'),  
+  getOrgByIdService: withLogging(getOrgByIdService, 'getOrgByIdService'),
+  updateOrgService: withLogging(updateOrgService, 'updateOrgService'),
+};

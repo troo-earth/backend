@@ -88,7 +88,7 @@ app.get('/health', async (req, res) => {
 
 app.use('/api/v1/auth', authRoutes);
 
-//app.use(authMiddelware); // Uncomment this line to enable authentication for all routes below
+app.use(authMiddelware); 
 
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/orgs', orgRoutes);

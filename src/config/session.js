@@ -7,6 +7,7 @@ const allowCrossSiteDev = process.env.ALLOW_CROSS_SITE_DEV === 'true';
 
 const sameSite =
   allowCrossSiteDev ? 'none' : 'lax';
+const secure = allowCrossSiteDev ? true : isProd
 
 const sessionMiddleware = session({
   name: 'troo.sid',
@@ -23,7 +24,7 @@ const sessionMiddleware = session({
 
   cookie: {
     httpOnly: true,
-    secure: false,
+    secure: secure,
     sameSite: sameSite,
     maxAge: 1000 * 60 * 60 * 24
   }

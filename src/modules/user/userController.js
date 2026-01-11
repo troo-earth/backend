@@ -6,17 +6,35 @@ async function createUserController(req, res, next) {
   try {
     const { user_name, email, password, fullname } = req.body || {};
 
-    // Basic HTTP-level check for required fields
     if (!user_name || !email || !password || !fullname) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields'
+      });
     }
 
     const user = await createUserService({ user_name, email, password, fullname });
 
-    // Sanitize response (remove sensitive data)
-    const { password_hash, ...safeUser } = user.toJSON ? user.toJSON() : user;
+    const { password_hash, ...safeUser } =
+      user.toJSON ? user.toJSON() : user;
 
-    return res.status(201).json({ success: true, message: 'User created successfully', data: safeUser });
+    // 🔒 Rotate session + respond ONLY inside callback
+    req.session.regenerate((err) => {
+      if (err) return next(err);
+
+      req.session.user = {
+        user_id: user.user_id,
+        email: user.email,
+        fullname: user.fullname,
+      };
+
+      return res.status(201).json({
+        success: true,
+        message: 'User created successfully',
+        data: safeUser,
+      });
+    });
+
   } catch (error) {
     const statusMap = {
       'Invalid email format': 400,
@@ -29,10 +47,15 @@ async function createUserController(req, res, next) {
     };
 
     const status = statusMap[error.message] || 500;
+
     if (status !== 500) {
-      return res.status(status).json({ success: false, message: error.message });
+      return res.status(status).json({
+        success: false,
+        message: error.message
+      });
     }
-    next(error);  // Pass unexpected errors to global handler
+
+    next(error);
   }
 }
 

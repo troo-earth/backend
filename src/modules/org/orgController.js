@@ -7,7 +7,7 @@ const { withLogging } = require('../../utils/logger');
 
 async function createOrgController(req, res, next) {
   try {
-    const org = await createOrgService(req.body);
+    const org = await createOrgService(req.body, req.session.user);
 
     return res.status(201).json({
       success: true,

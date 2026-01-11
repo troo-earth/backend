@@ -1,7 +1,8 @@
 const Org = require('./orgModel');
 const { withLogging } = require('../../utils/logger');
+const User = require('../user/userModel');
 
-async function createOrgService(payload) {
+async function createOrgService(payload, sessionUser) {
   const {
     org_name,
     country_code,
@@ -14,6 +15,11 @@ async function createOrgService(payload) {
     throw new Error('org_name and country_code are required');
   }
 
+  if (!sessionUser || !sessionUser.user_id) {
+    throw new Error('Unauthenticated');
+  }
+
+  // 1️⃣ Create org
   const org = await Org.create({
     org_name: org_name.trim(),
     country_code: country_code.toUpperCase(),
@@ -22,8 +28,19 @@ async function createOrgService(payload) {
     incorporation_doc_url,
   });
 
+  // 2️⃣ Attach org to creator user
+  await User.update(
+    { org_id: org.org_id },
+    { where: { user_id: sessionUser.user_id } }
+  );
+
   return org;
 }
+
+module.exports = {
+  createOrgService,
+};
+
 
 /**
  * Get org by ID

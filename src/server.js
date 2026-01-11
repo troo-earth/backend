@@ -87,10 +87,10 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', userRoutes);
 
 app.use(authMiddelware); 
 
-app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
 app.use('/api/v1/payments', paymentRoutes);

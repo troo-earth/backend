@@ -5,9 +5,8 @@ const redisClient = require('./redis');
 const isProd = process.env.NODE_ENV === 'production';
 const allowCrossSiteDev = process.env.ALLOW_CROSS_SITE_DEV === 'true';
 
-const sameSite =
-  allowCrossSiteDev ? 'none' : 'lax';
-const secure = allowCrossSiteDev ? true : isProd
+const sameSite = allowCrossSiteDev ? 'none' : 'lax';
+const secure = isProd && allowCrossSiteDev;
 
 const sessionMiddleware = session({
   name: 'troo.sid',

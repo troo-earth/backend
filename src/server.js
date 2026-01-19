@@ -96,7 +96,6 @@ app.get('/health', async (req, res) => {
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/trading', tradingRoutes);
 
 app.use(authMiddelware); 
 
@@ -105,6 +104,7 @@ app.use('/api/v1/marketplace', marketplaceRoutes);
 app.use('/api/v1/listings', listingRoutes);
 app.use('/api/v1/holdings', holdingsRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
+app.use('/api/v1/trading', tradingRoutes);
 
 app.use(errorHandler);
 

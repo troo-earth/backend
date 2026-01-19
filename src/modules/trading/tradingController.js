@@ -1,47 +1,71 @@
-const { buyCreditsService, sellCreditsService, transferCreditsService, retireCreditsService } = require('./tradingService'); // Adjust path if needed
+const {
+  sellCreditsService,
+  transferCreditsService,
+  retireCreditsService
+} = require('./tradingService');
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 async function buyCreditsController(req, res, next) {
   try {
     const { listing_id, buyer_org_id, amount } = req.body || {};
 
-    // Basic HTTP-level check for required fields
+    // Basic HTTP-level validation
     if (!listing_id || !buyer_org_id || !amount) {
       return res.error('Missing required fields', 400);
     }
 
-    // Validate UUID format for listing_id and buyer_org_id using uuid library
     if (!uuidValidate(listing_id)) {
       return res.error('Invalid UUID format for listing_id', 400);
     }
+
     if (!uuidValidate(buyer_org_id)) {
       return res.error('Invalid UUID format for buyer_org_id', 400);
     }
 
-    // Additional validation for amount
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       return res.error('Amount must be a positive number', 400);
     }
 
-    const result = await buyCreditsService(listing_id, buyer_org_id, parsedAmount);
+    // Convert credits → cents (adapt if pricing logic changes)
+    const amountInCents = Math.round(parsedAmount * 100);
 
-    // No sanitization needed; result is already safe
-    return res.success('Purchase successful', result);
+    // Create Stripe PaymentIntent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: 'sgd', // keep consistent with your system
+      automatic_payment_methods: { enabled: true },
+
+      metadata: {
+        listing_id,
+        buyer_org_id,
+        credits_amount: parsedAmount.toString(),
+      },
+    });
+
+    return res.success('Payment intent created', {
+      payment_intent_id: paymentIntent.id,
+      client_secret: paymentIntent.client_secret,
+    });
   } catch (error) {
     const statusMap = {
       'Listing not found': 404,
-      'Listing is not open for purchase': 400,
-      'Insufficient credits available in the listing': 400,
-      // Add more mappings as needed for other service errors
+
+      'Insufficient credits available in the listing': 409,
+      'Listing is not open for purchase': 409,
+      'Seller does not have enough locked credits': 409,
+
+      // Internal consistency errors
+      'Seller holdings not found': 500,
     };
 
     const status = statusMap[error.message] || 500;
     if (status !== 500) {
       return res.error(error.message, status);
     }
-    next(error);  // Pass unexpected errors to global handler
+    next(error);
   }
 }
 

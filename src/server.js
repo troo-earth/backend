@@ -5,7 +5,6 @@ const sequelize = require('./config/database');
 const userRoutes = require('./modules/user/userRoutes');
 const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
-const paymentRoutes = require('./modules/payments/paymentRoutes');
 const authRoutes = require('./modules/auth/authRoutes');
 const listingRoutes = require('./modules/listing/listingRoutes');
 const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
@@ -21,6 +20,15 @@ const { tracingMiddleware } = require('./middleware/tracingMiddleware');
 
 const app = express();
 const cors = require('cors');
+
+//Stripe Webhook Handler Must exactly be placed here. DO NOT CHANGE THIS POSITION !!!
+const { buildStripeWebhookExpressHandler } = require('./utils/stripe-webhook');
+
+app.post(
+  '/api/v1/stripe/webhook',
+  express.raw({ type: 'application/json' }),
+  buildStripeWebhookExpressHandler()
+);
 
 // Middleware (same as before)
 app.use(express.json());
@@ -88,15 +96,14 @@ app.get('/health', async (req, res) => {
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/trading', tradingRoutes);
 
 app.use(authMiddelware); 
 
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
-app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/listings', listingRoutes);
 app.use('/api/v1/holdings', holdingsRoutes);
-app.use('/api/v1/trading', tradingRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
 
 app.use(errorHandler);

@@ -1,82 +1,112 @@
 const Listing = require('../listing/listingModel.js');
 const Holdings = require('../holdings/holdingsModel.js');
-const Transactions = require('./transactionsModel.js');
-const RetirementCertificate = require('./retirementCertificateModel');
+const Transactions = require('../transactions/transactionsModel.js');
+const RetirementCertificate = require('../reitrements/retirementCertificateModel.js');
 const IcrProject = require('../marketplace/models/icrProjects.js');
+const Org = require('../org/orgModel.js');
 const sequelize = require('../../config/database.js');
 const { withLogging } = require('../../utils/logger.js');
 
-const buyCreditsService = async (listing_id, buyer_org_id, amount) => {
-    const t = await sequelize.transaction();
-    try {
-        // Step 1: Find listing
-        const listing = await Listing.findByPk(listing_id, { transaction: t });
+const buyCreditsService = async (
+    listing_id,
+    buyer_org_id,
+    amount,
+    { transaction }
+) => {
+    if (!transaction) {
+        throw new Error('Transaction is required for buyCreditsService');
+    }
 
-        if (!listing) throw new Error('Listing not found');
-        if (listing.status !== 'open') throw new Error('Listing is not open for purchase');
-        if (parseFloat(listing.credits_available) < amount)
-            throw new Error('Insufficient credits available in the listing');
+    // Step 1: Find listing
+    const listing = await Listing.findByPk(listing_id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+    });
 
-        // Step 2: Reduce listing supply
-        listing.credits_available = (parseFloat(listing.credits_available) - amount).toFixed(2);
-        if (listing.credits_available == 0) listing.status = 'closed';
-        await listing.save({ transaction: t });
+    if (!listing) throw new Error('Listing not found');
+    if (listing.status !== 'open') throw new Error('Listing is not open for purchase');
+    if (parseFloat(listing.credits_available) < amount) {
+        throw new Error('Insufficient credits available in the listing');
+    }
 
-        // Step 2.5: Reduce seller holdings if this is an org-owned listing
-        if (listing.seller_id) {
-            const sellerHoldings = await Holdings.findOne({
-                where: { org_id: listing.seller_id, project_id: listing.project_id },
-                transaction: t,
-                lock: t.LOCK.UPDATE
-            });
-            if (!sellerHoldings) {
-                throw new Error('Seller holdings not found');
-            }
-            if (parseFloat(sellerHoldings.locked_for_sale) < amount) {
-                throw new Error('Seller does not have enough locked credits');
-            }
-            sellerHoldings.locked_for_sale =
-                (parseFloat(sellerHoldings.locked_for_sale) - amount).toFixed(2);
-            sellerHoldings.credit_balance =
-                (parseFloat(sellerHoldings.credit_balance) - amount).toFixed(2);
-            await sellerHoldings.save({ transaction: t });
-        }
+    // Step 2: Reduce listing supply
+    listing.credits_available =
+        (parseFloat(listing.credits_available) - amount).toFixed(2);
 
-        // Step 3: Add credits to buyer holdings
-        let buyerHoldings = await Holdings.findOne({
-            where: { org_id: buyer_org_id, project_id: listing.project_id },
-            transaction: t
+    if (parseFloat(listing.credits_available) === 0) {
+        listing.status = 'closed';
+    }
+
+    await listing.save({ transaction });
+
+    // Step 2.5: Reduce seller holdings (if org-owned listing)
+    if (listing.seller_id) {
+        const sellerHoldings = await Holdings.findOne({
+            where: {
+                org_id: listing.seller_id,
+                project_id: listing.project_id,
+            },
+            transaction,
+            lock: transaction.LOCK.UPDATE,
         });
 
-        if (!buyerHoldings) {
-            // If buyer has no entry for this project, create a new one
-            buyerHoldings = await Holdings.create({
-                org_id: buyer_org_id,
-                project_id: listing.project_id,
-                credit_balance: amount
-            }, { transaction: t });
-        } else {
-            buyerHoldings.credit_balance = (parseFloat(buyerHoldings.credit_balance) + amount).toFixed(2);
-            await buyerHoldings.save({ transaction: t });
+        if (!sellerHoldings) {
+            throw new Error('Seller holdings not found');
         }
 
-        await Transactions.create({
+        if (parseFloat(sellerHoldings.locked_for_sale) < amount) {
+            throw new Error('Seller does not have enough locked credits');
+        }
+
+        sellerHoldings.locked_for_sale =
+            (parseFloat(sellerHoldings.locked_for_sale) - amount).toFixed(2);
+
+        sellerHoldings.credit_balance =
+            (parseFloat(sellerHoldings.credit_balance) - amount).toFixed(2);
+
+        await sellerHoldings.save({ transaction });
+    }
+
+    // Step 3: Add credits to buyer holdings
+    let buyerHoldings = await Holdings.findOne({
+        where: {
+            org_id: buyer_org_id,
+            project_id: listing.project_id,
+        },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!buyerHoldings) {
+        buyerHoldings = await Holdings.create(
+            {
+                org_id: buyer_org_id,
+                project_id: listing.project_id,
+                credit_balance: amount,
+            },
+            { transaction }
+        );
+    } else {
+        buyerHoldings.credit_balance =
+            (parseFloat(buyerHoldings.credit_balance) + amount).toFixed(2);
+
+        await buyerHoldings.save({ transaction });
+    }
+
+    // Step 4: Record domain transaction
+    await Transactions.create(
+        {
             type: 'buy',
-            from_org_id: listing.seller_id || "Registry",
+            from_org_id: listing.seller_id,
             to_org_id: buyer_org_id,
             project_id: listing.project_id,
             amount,
-            related_listing_id: listing.listing_id
-        }, { transaction: t });
+            related_listing_id: listing.listing_id,
+        },
+        { transaction }
+    );
 
-        await t.commit();
-
-        return {};
-
-    } catch (error) {
-        if (t) await t.rollback();
-        throw new Error(error.message);
-    }
+    return {};
 };
 
 const sellCreditsService = async (org_id, project_id, amount, price) => {

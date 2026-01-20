@@ -24,8 +24,10 @@ async function createUserController(req, res, next) {
 
       req.session.user = {
         user_id: user.user_id,
-        email: user.email,
         fullname: user.fullname,
+        email: user.email,
+        role: user.role,        
+        org_id: user.org_id
       };
 
       return res.status(201).json({

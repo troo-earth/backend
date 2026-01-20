@@ -8,185 +8,139 @@ const redisClient = require('../config/redis');
 const router = express.Router();
 
 /* -------------------------------
-   In-memory health state
+   GLOBAL PERMANENT REDIS KEYS
 -------------------------------- */
-const healthState = {
-    startedAt: new Date(),
-    lastRequest: null,
-    stats: {
-        totalRequests: 0,
-        totalErrors: 0,
-        totalResponseTime: 0,
-        requestCount: 0,
-    }
-};
+const K_REQ_TOTAL = 'health:global:req_total';
+const K_REQ_ERRORS = 'health:global:req_errors';
+const K_RES_TIME = 'health:global:res_time_total';
+const K_RES_COUNT = 'health:global:res_count';
+const K_START_TIME = 'health:global:start_time';
+const K_LAST_REQ = 'health:global:last_request';
 
 /* -------------------------------
-   Request tracker & Metrics
+   Request tracker & Metrics (Redis)
 -------------------------------- */
 function markRequest(req, res) {
     const path = req.originalUrl || req.path;
-
-    // Filter internal/dashboard traffic
-    if (path === '/' || path.startsWith('/health') || path.includes('favicon')) {
-        return;
-    }
+    if (path === '/' || path.startsWith('/health') || path.includes('favicon')) return;
 
     const start = process.hrtime();
-
-    // Log Last Request
-    healthState.lastRequest = {
+    const lastReqData = JSON.stringify({
         time: new Date(),
         ip: req.ip,
         path: path,
-        method: req.method,
-    };
-
-    healthState.stats.totalRequests++;
+        method: req.method
+    });
+    
+    redisClient.set(K_LAST_REQ, lastReqData).catch(() => {});
+    redisClient.incr(K_REQ_TOTAL).catch(() => {});
 
     if (res && typeof res.on === 'function') {
         res.on('finish', () => {
             const diff = process.hrtime(start);
             const timeMs = (diff[0] * 1e9 + diff[1]) / 1e6;
-
-            healthState.stats.totalResponseTime += timeMs;
-            healthState.stats.requestCount++;
-
-            if (res.statusCode >= 400) {
-                healthState.stats.totalErrors++;
-            }
+            redisClient.incr(K_RES_COUNT).catch(() => {});
+            redisClient.incrByFloat(K_RES_TIME, timeMs).catch(() => {});
+            if (res.statusCode >= 400) redisClient.incr(K_REQ_ERRORS).catch(() => {});
         });
     }
 }
 
 /* -------------------------------
+   ONE-TIME ADMIN RESET
+   URL: /reset?key=your_key
+-------------------------------- */
+router.get('/reset', async (req, res) => {
+    const secretKey = process.env.HEALTH_ADMIN_KEY; 
+    if (req.query.key !== secretKey) return res.status(403).send('Unauthorized');
+    try {
+        await redisClient.del([K_REQ_TOTAL, K_REQ_ERRORS, K_RES_TIME, K_RES_COUNT, K_START_TIME, K_LAST_REQ]);
+        await redisClient.set(K_START_TIME, Date.now());
+        res.send({ success: true, message: 'Stats reset successfully' });
+    } catch (err) { res.status(500).send({ success: false, error: err.message }); }
+});
+
+/* -------------------------------
    Health data collector
 -------------------------------- */
 async function collectHealth() {
-    // ---------- Database ----------
-    let dbStatus = 'disconnected';
-    let dbPingMs = null;
-
+    let dbStatus = 'disconnected', dbPingMs = null;
     try {
         const start = Date.now();
         await sequelize.authenticate();
         dbPingMs = Date.now() - start;
         dbStatus = 'connected';
-    } catch {
-        dbStatus = 'error';
-    }
+    } catch { dbStatus = 'error'; }
 
-    // ---------- Redis ----------
-    let redisStatus = 'disconnected';
-    let redisPingMs = null;
+    let redisStatus = 'disconnected', redisPingMs = null;
+    let stats = { totalRequests: 0, totalErrors: 0, avgResponseTime: 0, uptimeSeconds: 0, lastRequest: null };
 
     try {
         const start = Date.now();
         await redisClient.ping();
         redisPingMs = Date.now() - start;
         redisStatus = 'connected';
-    } catch {
-        redisStatus = 'error';
-    }
 
-    // ---------- Frontend (Hardcoded) ----------
-    let frontendStatus = 'unknown';
-    let frontendPingMs = null;
-    const frontendUrl = 'https://dev.troo.earth'; // <--- Hardcoded URL
+        const [totalReq, totalErr, totalTime, resCount, startTimeStr, lastReqStr] = await Promise.all([
+            redisClient.get(K_REQ_TOTAL), redisClient.get(K_REQ_ERRORS),
+            redisClient.get(K_RES_TIME), redisClient.get(K_RES_COUNT),
+            redisClient.get(K_START_TIME), redisClient.get(K_LAST_REQ)
+        ]);
 
+        let startTime = startTimeStr ? parseInt(startTimeStr) : Date.now();
+        if (!startTimeStr) await redisClient.set(K_START_TIME, startTime);
+
+        stats.totalRequests = parseInt(totalReq || '0');
+        stats.totalErrors = parseInt(totalErr || '0');
+        const timeSum = parseFloat(totalTime || '0'), countSum = parseInt(resCount || '0');
+        stats.avgResponseTime = countSum > 0 ? (timeSum / countSum).toFixed(2) : 0;
+        stats.uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+        stats.lastRequest = lastReqStr ? JSON.parse(lastReqStr) : null;
+    } catch { redisStatus = 'error'; stats.uptimeSeconds = Math.floor(process.uptime()); }
+
+    const frontendUrl = 'https://dev.troo.earth';
+    let fePing = null;
     try {
-        const start = Date.now();
-        const response = await axios.get(frontendUrl, {
-            timeout: 3000,
-            validateStatus: () => true, // Accept any status to calculate ping
-        });
-        frontendPingMs = Date.now() - start;
-        // Check if site is actually up (200-499 range)
-        frontendStatus = (response.status >= 200 && response.status < 500) ? 'reachable' : 'unhealthy';
-    } catch {
-        frontendStatus = 'unreachable';
-    }
+        const s = Date.now();
+        await axios.get(frontendUrl, { timeout: 3000, validateStatus: () => true });
+        fePing = Date.now() - s;
+    } catch { fePing = null; }
 
-    // ---------- Stripe API (New) ----------
-    let stripeStatus = 'unknown';
-    let stripePingMs = null;
-
+    let strPing = null;
     try {
-        const start = Date.now();
-        // Pings Stripe's public API health check endpoint
+        const s = Date.now();
         await axios.get('https://api.stripe.com/healthcheck', { timeout: 3000 });
-        stripePingMs = Date.now() - start;
-        stripeStatus = 'reachable';
-    } catch {
-        stripeStatus = 'unreachable';
-    }
+        strPing = Date.now() - s;
+    } catch { strPing = null; }
 
-    // ---------- System Metrics ----------
-    const memoryUsage = process.memoryUsage();
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const usedMem = totalMem - freeMem;
-    const memPercent = Math.round((usedMem / totalMem) * 100);
-    const loadAvg = os.loadavg();
-
-    // Stats Calcs
-    const totalReqs = healthState.stats.totalRequests;
-    const errors = healthState.stats.totalErrors;
-    const successCount = totalReqs - errors;
-    const successRate = totalReqs > 0 ? ((successCount) / totalReqs * 100).toFixed(1) : 100;
-    const avgTime = healthState.stats.requestCount > 0 ? (healthState.stats.totalResponseTime / healthState.stats.requestCount).toFixed(2) : 0;
+    const mem = process.memoryUsage();
+    const successCount = stats.totalRequests - stats.totalErrors;
+    const successRate = stats.totalRequests > 0 ? ((successCount) / stats.totalRequests * 100).toFixed(1) : 100;
 
     return {
         status: (dbStatus === 'connected' && redisStatus === 'connected') ? 'ok' : 'issue',
-        timestamp: new Date().toISOString(),
         runtime: {
-            uptimeSeconds: Math.floor(process.uptime()),
-            // --- NEW DATA POINTS ---
-            nodeVersion: process.version,
+            uptimeSeconds: stats.uptimeSeconds,
+            memory: { rss: Math.round(mem.rss / 1024 / 1024), heapUsed: Math.round(mem.heapUsed / 1024 / 1024) },
+            cpu: { loadAvg: os.loadavg().map(l => l.toFixed(2)) },
             platform: `${os.type()} (${os.arch()})`,
-            cpuCount: os.cpus().length,
-            // -----------------------
-            memory: {
-                rss: Math.round(memoryUsage.rss / 1024 / 1024),
-                // --- NEW MEMORY DATA ---
-                heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
-                // -----------------------
-                systemPercent: memPercent
-            },
-            cpu: {
-                loadAvg: loadAvg.map(l => l.toFixed(2))
-            }
+            nodeVersion: process.version
         },
-        traffic: {
-            totalRequests: totalReqs,
-            successCount: successCount,
-            failedCount: errors,
-            successRate: successRate,
-            avgResponseTime: avgTime,
-            lastRequest: healthState.lastRequest,
-        },
+        traffic: { totalRequests: stats.totalRequests, successCount, failedCount: stats.totalErrors, successRate, avgResponseTime: stats.avgResponseTime, lastRequest: stats.lastRequest },
         dependencies: {
             database: { status: dbStatus, pingMs: dbPingMs },
             redis: { status: redisStatus, pingMs: redisPingMs },
-            frontend: {
-                url: process.env.FRONTEND_HEALTH_URL,
-                status: frontendStatus,
-                pingMs: frontendPingMs,
-            },
-            stripe: {
-                status: stripeStatus,
-                pingMs: stripePingMs,
-            },
+            frontend: { status: fePing ? 'reachable' : 'unreachable', pingMs: fePing },
+            stripe: { status: strPing ? 'reachable' : 'unreachable', pingMs: strPing },
         },
     };
 }
 
 /* -------------------------------
-   UI at /
+   UI Route
 -------------------------------- */
 router.get('/', async (req, res) => {
     const health = await collectHealth();
-
     res.send(`
 <!DOCTYPE html>
 <html lang="en">
@@ -194,524 +148,197 @@ router.get('/', async (req, res) => {
   <meta charset="UTF-8">
   <title>Troo Earth · API Status</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  
   <link rel="icon" type="image/svg+xml" href="https://dev.troo.earth/favicon.svg">
-  
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,300;400;600;700;800;900&display=swap" rel="stylesheet">
-  
   <style>
-    :root {
-      --brand-teal: #007473;
-      --brand-dark: #173E35;
-      --brand-accent: #FFB71B;
-      --bg-color: #F8F9FA;
-      --text-main: #173E35;
-      --text-muted: #64748b;
-    }
-
+    :root { --teal: #007473; --dark: #173E35; --accent: #FFB71B; --bg: #F8F9FA; --muted: #64748b; }
     * { box-sizing: border-box; }
-
-    body {
-      background-color: var(--bg-color);
-      color: var(--text-main);
-      font-family: 'Nunito Sans', sans-serif;
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      overflow-x: hidden;
+    
+    body { 
+      background-color: var(--bg); color: var(--dark); font-family: 'Nunito Sans', sans-serif; 
+      margin: 0; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; 
     }
 
-    /* --- Atmospheric Layer --- */
-    .atmosphere {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none;
-      z-index: -1;
-      overflow: hidden;
+    .atmosphere { position: fixed; inset: 0; z-index: -1; }
+    .blob { position: absolute; border-radius: 50%; opacity: 0.15; filter: blur(100px); }
+    .blob-1 { top: -10%; left: -5%; width: 45vw; height: 45vw; background: var(--teal); }
+    .blob-2 { top: 15%; right: -5%; width: 40vw; height: 40vw; background: var(--accent); animation: pulse 8s infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.15; } 50% { transform: scale(1.05); opacity: 0.2; } }
+
+    .container { width: 100%; max-width: 1100px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; }
+    
+    header { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+    .brand-logo { height: 46px; }
+    .time-badge { font-size: 13px; font-weight: 800; background: rgba(255,255,255,0.7); padding: 8px 18px; border-radius: 99px; border: 1px solid rgba(0,0,0,0.05); }
+
+    .status-headline { 
+      font-size: clamp(32px, 5vw, 58px); font-weight: 900; line-height: 1; letter-spacing: -3px; text-align: center; margin: 0; 
+      background: linear-gradient(to left, var(--teal), var(--dark)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+    }
+    .subtext { font-size: 16px; font-weight: 700; color: var(--muted); margin-top: 12px; margin-bottom: 30px; }
+
+    .glass-card { 
+      width: 100%; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(25px); 
+      border-radius: 32px; box-shadow: 0 30px 100px -20px rgba(0, 116, 115, 0.1); 
+      border: 1px solid rgba(255, 255, 255, 0.6); overflow: hidden; position: relative; 
     }
 
-    .blob {
-      position: absolute;
-      border-radius: 50%;
-      opacity: 0.2;
-    }
+    .loader { height: 6px; width: 0%; background: var(--accent); position: absolute; top: 0; z-index: 10; transition: width 10s linear; }
 
-    .blob-1 {
-      top: -10%; left: -5%;
-      width: 600px; height: 600px;
-      background: var(--brand-teal);
-      filter: blur(140px);
-    }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+    .col { padding: 45px; border-right: 1px solid rgba(0,0,0,0.04); }
+    .col:last-child { border-right: none; }
+    
+    .label { text-transform: uppercase; font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; margin-bottom: 25px; }
+    .big { font-size: 48px; font-weight: 900; color: var(--dark); line-height: 1; letter-spacing: -2px; margin-bottom: 10px; }
+    
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.03); font-size: 15px; font-weight: 700; }
+    .row:last-child { border-bottom: none; }
 
-    .blob-2 {
-      top: 10%; right: -10%;
-      width: 500px; height: 500px;
-      background: var(--brand-accent);
-      filter: blur(120px);
-      animation: pulse 8s ease-in-out infinite;
-    }
+    .pill { padding: 5px 12px; border-radius: 10px; font-size: 11px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+    .ok { background: rgba(0, 116, 115, 0.08); color: var(--teal); }
+    .err { background: rgba(239, 68, 68, 0.08); color: #EF4444; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .blink { animation: flash 2s infinite; }
+    @keyframes flash { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 
-    .blob-3 {
-      bottom: -10%; left: 10%;
-      width: 500px; height: 500px;
-      background: var(--brand-teal);
-      filter: blur(130px);
-    }
+    .footer-req { background: rgba(23, 62, 53, 0.03); padding: 18px 45px; display: flex; justify-content: space-between; font-family: monospace; font-size: 13px; font-weight: 700; border-top: 1px solid rgba(0,0,0,0.05); }
 
-    .noise {
-      position: absolute;
-      inset: 0;
-      opacity: 0.04;
-      background-image: url('https://grainy-gradients.vercel.app/noise.svg');
-      mix-blend-mode: overlay;
+    /* FIXED FOOTER PREVENTS JUMPING */
+    .footer-msg { 
+      margin-top: 30px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; 
     }
+    .flex-line { display: flex; align-items: center; gap: 15px; }
+    .btn-refresh { 
+      background: var(--teal); color: white; border: none; padding: 8px 20px; border-radius: 10px; 
+      cursor: pointer; font-weight: 900; font-size: 12px; transition: 0.2s; display: none;
+    }
+    .btn-refresh:hover { background: var(--dark); transform: translateY(-1px); }
+    .money-tag { font-size: 10px; font-weight: 800; opacity: 0.5; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; display: none; }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 0.2; transform: scale(1); }
-      50% { opacity: 0.3; transform: scale(1.1); }
-    }
-
-    /* --- Container --- */
-    .container {
-      width: 100%;
-      max-width: 1000px;
-      padding: 60px 24px;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    /* --- Header --- */
-    header {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 50px;
-    }
-
-    .brand-logo {
-      height: 48px; /* Adjusted size for the full logo */
-      width: auto;
-    }
-
-    .time-badge {
-      font-size: 14px;
-      font-weight: 700;
-      background: rgba(255,255,255,0.6);
-      padding: 8px 16px;
-      border-radius: 99px;
-      border: 1px solid rgba(0,0,0,0.05);
-      color: var(--brand-dark);
-      backdrop-filter: blur(4px);
-    }
-
-    /* --- HERO STATUS --- */
-    .hero-status {
-      text-align: center;
-      margin-bottom: 50px;
-      width: 100%;
-    }
-
-    .status-headline {
-      font-size: 56px;
-      font-weight: 900;
-      line-height: 1.1;
-      letter-spacing: -2px;
-      margin: 0;
-      /* CHANGED: 'to right' -> 'to left' */
-      background: linear-gradient(to left, var(--brand-teal), var(--brand-dark));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .status-headline.issue {
-      background: linear-gradient(to right, #EF4444, #B91C1C);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .status-sub {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-muted);
-      margin-top: 12px;
-      max-width: 600px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    /* --- Main Card --- */
-    .glass-card {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(20px);
-      border-radius: 32px;
-      box-shadow: 0 20px 80px -20px rgba(0, 116, 115, 0.15);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      overflow: hidden;
-      position: relative;
-    }
-
-    /* Loading Line */
-    .loading-line {
-      height: 6px;
-      width: 0%;
-      background: var(--brand-accent);
-      position: absolute;
-      top: 0; left: 0;
-      z-index: 20;
-    }
-    .loading-line.animate {
-      width: 100%;
-      transition: width 10s linear;
-    }
-
-    /* --- Grid --- */
-    .grid-layout {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      divide-x: 1px solid rgba(0,0,0,0.04);
-    }
     @media (max-width: 900px) { 
-      .grid-layout { grid-template-columns: 1fr; divide-x: none; divide-y: 1px solid rgba(0,0,0,0.04); } 
-    }
-
-    .column {
-      padding: 40px;
-    }
-
-    .col-header {
-      text-transform: uppercase;
-      font-size: 13px;
-      font-weight: 800;
-      letter-spacing: 2px;
-      color: #94a3b8;
-      margin-bottom: 30px;
-    }
-
-    /* --- Metric Typography --- */
-    .metric-block {
-      margin-bottom: 24px;
-    }
-    
-    .metric-value {
-      font-size: 36px;
-      font-weight: 800;
-      color: var(--brand-dark);
-      line-height: 1;
-      letter-spacing: -1px;
-    }
-    
-    .metric-label {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-muted);
-      margin-top: 6px;
-    }
-
-    /* --- List Rows --- */
-    .list-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid rgba(0,0,0,0.03);
-      font-size: 15px;
-    }
-    .list-row:last-child { border-bottom: none; }
-    
-    .key { color: var(--text-muted); font-weight: 600; }
-    .val { font-weight: 700; color: var(--brand-dark); }
-
-    /* --- Pills --- */
-    .pill {
-      padding: 6px 14px;
-      border-radius: 12px;
-      font-size: 13px;
-      font-weight: 800;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .pill.ok { background: rgba(0, 116, 115, 0.08); color: var(--brand-teal); }
-    .pill.err { background: rgba(239, 68, 68, 0.08); color: #EF4444; }
-
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-    .blink-green { animation: pulse-g 2s infinite; }
-    .blink-red { animation: pulse-r 1s infinite; }
-    
-    @keyframes pulse-g { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
-    @keyframes pulse-r { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
-
-    /* --- Footer Area --- */
-    .footer-req {
-      background: rgba(23, 62, 53, 0.03);
-      padding: 24px 40px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-family: monospace;
-      font-size: 13px;
-      color: var(--brand-dark);
-      border-top: 1px solid rgba(0,0,0,0.05);
-    }
-
-    .footer-msg {
-      margin-top: 30px;
-      text-align: center;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-muted);
+      body { height: auto; overflow-y: auto; padding: 40px 0; }
+      .grid { grid-template-columns: 1fr; } .col { border-right: none; border-bottom: 1px solid rgba(0,0,0,0.04); padding: 35px; }
+      .footer-req { flex-direction: column; gap: 10px; }
     }
   </style>
 </head>
 <body>
-
-  <div class="atmosphere">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
-    <div class="noise"></div>
-  </div>
-
+  <div class="atmosphere"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
   <div class="container">
-    
     <header>
-      <img src="https://dev.troo.earth/assets/mainLogo-Do2wEJmm.svg" alt="Troo Earth" class="brand-logo" />
-      
-      <div class="time-badge">
-        <span id="time-display">${new Date().toLocaleTimeString()}</span>
-      </div>
+      <img src="https://dev.troo.earth/assets/mainLogo-Do2wEJmm.svg" class="brand-logo">
+      <div class="time-badge"><span id="time-display">${new Date().toLocaleTimeString()}</span></div>
     </header>
 
-    <div class="hero-status">
-      <h1 id="global-headline" class="status-headline">All Systems Operational</h1>
-      <p class="status-sub">Real-time monitoring of API performance and dependencies.</p>
-    </div>
-
+    <h1 class="status-headline" id="headline">All Systems Operational</h1>
+    <p class="subtext">Real-time monitoring of API performance and dependencies.</p>
+    
     <div class="glass-card">
-      <div id="progress-bar" class="loading-line animate"></div>
-
-      <div class="grid-layout">
-        
-        <div class="column">
-          <div class="col-header">Traffic & Quality</div>
-          
-          <div class="metric-block">
-            <div class="metric-value" id="total-req">${health.traffic.totalRequests}</div>
-            <div class="metric-label">Total Requests</div>
-          </div>
-
-          <div class="list-row">
-            <span class="key">Successful</span>
-            <span class="val" style="color:var(--brand-teal)" id="success-count">${health.traffic.successCount}</span>
-          </div>
-          <div class="list-row">
-            <span class="key">Failed</span>
-            <span class="val" style="color:#EF4444" id="failed-count">${health.traffic.failedCount}</span>
-          </div>
-          <div class="list-row">
-            <span class="key">Success Rate</span>
-            <span class="val" id="success-rate">${health.traffic.successRate}%</span>
-          </div>
-          <div class="list-row">
-            <span class="key">Avg Latency</span>
-            <span class="val" id="avg-time">${health.traffic.avgResponseTime}ms</span>
-          </div>
+      <div id="progress-bar" class="loader"></div>
+      <div class="grid">
+        <div class="col">
+          <div class="label">Traffic & Quality</div>
+          <div class="big" id="total-req">${health.traffic.totalRequests}</div>
+          <div class="row"><span>Successful</span><span id="success-count" style="color:var(--teal)">${health.traffic.successCount}</span></div>
+          <div class="row"><span>Failed</span><span id="failed-count" style="color:#EF4444">${health.traffic.failedCount}</span></div>
+          <div class="row"><span>Success Rate</span><span id="success-rate">${health.traffic.successRate}%</span></div>
+          <div class="row"><span>Avg Latency</span><span id="avg-time">${health.traffic.avgResponseTime}ms</span></div>
         </div>
 
-        <div class="column">
-          <div class="col-header">Resources</div>
-          
-          <div class="metric-block">
-            <div class="metric-value" id="uptime" style="font-size:28px">--h --m --s</div>
-            <div class="metric-label">System Uptime</div>
-          </div>
-
-          <div class="list-row">
-            <span class="key">Memory (RSS)</span>
-            <span class="val" id="mem-rss">${health.runtime.memory.rss} MB</span>
-          </div>
-          <div class="list-row">
-            <span class="key">Heap Used</span>
-            <span class="val"><span id="mem-heap">${health.runtime.memory.heapUsed}</span> MB</span>
-          </div>
-          <div class="list-row">
-            <span class="key">Load Avg</span>
-            <span class="val" id="load">${health.runtime.cpu.loadAvg[0]}</span>
-          </div>
-          <div class="list-row">
-            <span class="key">Platform</span>
-            <span class="val" style="font-size:13px">${health.runtime.platform}</span>
-          </div>
-          <div class="list-row">
-            <span class="key">Runtime</span>
-            <span class="val">${health.runtime.nodeVersion} <span style="font-weight:400; opacity:0.5">/</span> ${health.runtime.cpuCount}c</span>
-          </div>
+        <div class="col">
+          <div class="label">Resources</div>
+          <div class="big" id="uptime">--h --m --s</div>
+          <div class="row"><span>Heap Used</span><span id="mem-heap">${health.runtime.memory.heapUsed} MB</span></div>
+          <div class="row"><span>Memory (RSS)</span><span>${health.runtime.memory.rss} MB</span></div>
+          <div class="row"><span>Load Avg</span><span id="load">${health.runtime.cpu.loadAvg[0]}</span></div>
+          <div class="row"><span>Platform</span><span style="font-size:10px">${health.runtime.platform}</span></div>
         </div>
 
-        <div class="column">
-          <div class="col-header">Connectivity</div>
-          
-          <div class="list-row">
-            <span class="key">Database</span>
-            <span id="pill-db" class="pill ${health.dependencies.database.status === 'connected' ? 'ok' : 'err'}">
-              <span id="dot-db" class="dot ${health.dependencies.database.status === 'connected' ? 'blink-green' : 'blink-red'}"></span>
-              <span id="ping-db">${health.dependencies.database.pingMs || '?'} ms</span>
-            </span>
-          </div>
-
-          <div class="list-row">
-            <span class="key">Redis Cache</span>
-            <span id="pill-redis" class="pill ${health.dependencies.redis.status === 'connected' ? 'ok' : 'err'}">
-              <span id="dot-redis" class="dot ${health.dependencies.redis.status === 'connected' ? 'blink-green' : 'blink-red'}"></span>
-              <span id="ping-redis">${health.dependencies.redis.pingMs || '?'} ms</span>
-            </span>
-          </div>
-
-          <div class="list-row">
-            <span class="key">Frontend</span>
-            <span id="pill-fe" class="pill ${health.dependencies.frontend.status === 'reachable' ? 'ok' : 'err'}">
-              <span id="dot-fe" class="dot ${health.dependencies.frontend.status === 'reachable' ? 'blink-green' : 'blink-red'}"></span>
-              <span id="ping-fe">${health.dependencies.frontend.pingMs || '?'} ms</span>
-            </span>
-          </div>
-
-          <div class="list-row">
-            <span class="key">Stripe API</span>
-            <span id="pill-stripe" class="pill err"> <span id="dot-stripe" class="dot blink-red"></span>
-              <span id="ping-stripe">? ms</span>
-            </span>
-          </div>
+        <div class="col">
+          <div class="label">Connectivity</div>
+          <div class="row"><span>Database</span><span id="pill-db" class="pill ok"><span class="dot blink"></span><span id="ping-db">-- ms</span></span></div>
+          <div class="row"><span>Redis Cache</span><span id="pill-redis" class="pill ok"><span class="dot blink"></span><span id="ping-redis">-- ms</span></span></div>
+          <div class="row"><span>Frontend</span><span id="pill-fe" class="pill ok"><span class="dot blink"></span><span id="ping-fe">-- ms</span></span></div>
+          <div class="row"><span>Stripe API</span><span id="pill-stripe" class="pill ok"><span class="dot blink"></span><span id="ping-stripe">-- ms</span></span></div>
         </div>
       </div>
 
       <div class="footer-req">
-        <div><span style="opacity:0.5; margin-right:10px;">LAST INBOUND</span> <span id="req-method" style="font-weight:bold">${health.traffic.lastRequest?.method || '-'}</span></div>
+        <div><span style="opacity:0.5; margin-right:10px;">LAST INBOUND</span> <span id="req-method" style="font-weight:900">${health.traffic.lastRequest?.method || '-'}</span></div>
         <div id="req-path">${health.traffic.lastRequest?.path || '-'}</div>
         <div id="req-ip" style="opacity:0.6">${health.traffic.lastRequest?.ip || '-'}</div>
       </div>
     </div>
 
     <div class="footer-msg">
-      <div id="updates-msg">Live Updates Active · <span id="count">3</span> refreshes remaining</div>
+      <div class="flex-line">
+        <div id="updates-status" style="font-weight:800; color:var(--muted)">Live Updates Active · <span id="count">3</span> refreshes remaining</div>
+        <button id="btn-refresh" class="btn-refresh" onclick="tick(true)">Manual Refresh</button>
+      </div>
+      <div id="money-tag" class="money-tag">Conserving energy today because we're going to be rich as fuck tomorrow. Use refresh sparingly to save server hits.</div>
     </div>
-
   </div>
 
   <script>
-    let updatesLeft = 3;
-    const progressBar = document.getElementById('progress-bar');
+    let left = 3;
+    const bar = document.getElementById('progress-bar');
+    const fmt = (s) => { const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=Math.floor(s%60); return h+'h '+m+'m '+sec+'s'; };
+    const resetBar = () => { bar.style.transition='none'; bar.style.width='0%'; void bar.offsetWidth; bar.style.transition='width 10s linear'; bar.style.width='100%'; };
     
-    // Helper to format seconds into HHh MMm SSs
-    function formatUptime(seconds) {
-      const h = Math.floor(seconds / 3600);
-      const m = Math.floor((seconds % 3600) / 60);
-      const s = Math.floor(seconds % 60);
-      return h + 'h ' + m + 'm ' + s + 's';
-    }
-    
-    function resetProgressBar() {
-      progressBar.classList.remove('animate');
-      progressBar.style.width = '0%';
-      void progressBar.offsetWidth; // Force Reflow
-      progressBar.classList.add('animate');
-      progressBar.style.width = '100%';
-    }
+    const updateUI = (d) => {
+      document.getElementById('time-display').innerText = new Date().toLocaleTimeString();
+      document.getElementById('total-req').innerText = d.traffic.totalRequests;
+      document.getElementById('success-count').innerText = d.traffic.successCount;
+      document.getElementById('failed-count').innerText = d.traffic.failedCount;
+      document.getElementById('success-rate').innerText = d.traffic.successRate + '%';
+      document.getElementById('avg-time').innerText = d.traffic.avgResponseTime + 'ms';
+      document.getElementById('uptime').innerText = fmt(d.runtime.uptimeSeconds);
+      document.getElementById('mem-heap').innerText = d.runtime.memory.heapUsed + ' MB';
+      document.getElementById('load').innerText = d.runtime.cpu.loadAvg[0];
+      
+      if (d.traffic.lastRequest) {
+          document.getElementById('req-method').innerText = d.traffic.lastRequest.method;
+          document.getElementById('req-path').innerText = d.traffic.lastRequest.path;
+          document.getElementById('req-ip').innerText = d.traffic.lastRequest.ip;
+      }
 
-    function updateUI(data) {
-       document.getElementById('time-display').innerText = new Date().toLocaleTimeString();
+      const setP = (id, s, p) => { 
+        const pill=document.getElementById('pill-'+id), isOk=s==='connected'||s==='reachable'; 
+        pill.className='pill '+(isOk?'ok':'err'); 
+        document.getElementById('ping-'+id).innerText=(p||'?')+' ms'; 
+      };
+      setP('db', d.dependencies.database.status, d.dependencies.database.pingMs);
+      setP('redis', d.dependencies.redis.status, d.dependencies.redis.pingMs);
+      setP('fe', d.dependencies.frontend.status, d.dependencies.frontend.pingMs);
+      setP('stripe', d.dependencies.stripe.status, d.dependencies.stripe.pingMs);
 
-       // Traffic
-       document.getElementById('total-req').innerText = data.traffic.totalRequests;
-       document.getElementById('success-count').innerText = data.traffic.successCount;
-       document.getElementById('failed-count').innerText = data.traffic.failedCount;
-       document.getElementById('success-rate').innerText = data.traffic.successRate + '%';
-       document.getElementById('avg-time').innerText = data.traffic.avgResponseTime + 'ms';
-       
-       // Resources (Formatted Uptime)
-       document.getElementById('uptime').innerText = formatUptime(data.runtime.uptimeSeconds);
-       document.getElementById('mem-rss').innerText = data.runtime.memory.rss + ' MB';
-       document.getElementById('load').innerText = data.runtime.cpu.loadAvg[0];
-       document.getElementById('mem-heap').innerText = data.runtime.memory.heapUsed;
+      const hl = document.getElementById('headline');
+      if (d.status === 'ok') { hl.innerText = "All Systems Operational"; hl.style.background = ""; }
+      else { hl.innerText = "System Issues Detected"; hl.style.background = "linear-gradient(to right, #EF4444, #B91C1C)"; hl.style.webkitBackgroundClip = "text"; }
+    };
 
-       // Pills
-       const setPill = (id, status, ping) => {
-         const pill = document.getElementById('pill-' + id);
-         const dot = document.getElementById('dot-' + id);
-         const pingEl = document.getElementById('ping-' + id);
-         const isOk = status === 'connected' || status === 'reachable';
-         
-         pill.className = 'pill ' + (isOk ? 'ok' : 'err');
-         dot.className = 'dot ' + (isOk ? 'blink-green' : 'blink-red');
-         pingEl.innerText = (ping !== null ? ping : '?') + ' ms';
-       };
-
-       setPill('db', data.dependencies.database.status, data.dependencies.database.pingMs);
-       setPill('redis', data.dependencies.redis.status, data.dependencies.redis.pingMs);
-       setPill('fe', data.dependencies.frontend.status, data.dependencies.frontend.pingMs);
-       setPill('stripe', data.dependencies.stripe.status, data.dependencies.stripe.pingMs);
-
-       // Last Req
-       if (data.traffic.lastRequest) {
-         document.getElementById('req-method').innerText = data.traffic.lastRequest.method;
-         document.getElementById('req-path').innerText = data.traffic.lastRequest.path;
-         document.getElementById('req-ip').innerText = data.traffic.lastRequest.ip;
-       }
-       
-       // Headline Status
-       const hl = document.getElementById('global-headline');
-       if (data.status === 'ok') {
-         hl.classList.remove('issue');
-         hl.innerText = "All Systems Operational";
-       } else {
-         hl.classList.add('issue');
-         hl.innerText = "System Issues Detected";
-       }
-    }
-
-    async function fetchHealth() {
-      if (updatesLeft <= 0) return;
-
+    async function tick(manual = false) {
+      if (!manual && left <= 0) return;
       try {
-        const res = await fetch('/health/json');
-        const data = await res.json();
-        updateUI(data);
-        
-        updatesLeft--;
-        document.getElementById('count').innerText = updatesLeft;
-
-        if (updatesLeft > 0) {
-           resetProgressBar();
-        } else {
-           progressBar.style.width = '100%';
-           progressBar.classList.remove('animate');
-           document.getElementById('updates-msg').innerHTML = 
-            "<span style='color:#B45309; background:#FFFBEB; padding:6px 12px; border-radius:8px;'>updates paused</span>";
+        const r = await fetch('/health/json'); const d = await r.json(); updateUI(d);
+        if (!manual) {
+          left--; document.getElementById('count').innerText = left;
+          if (left > 0) resetBar();
+          else {
+            document.getElementById('updates-status').innerHTML = "<span style='color:#B45309; background:#FFFBEB; padding:6px 12px; border-radius:8px;'>Updates Paused</span>";
+            document.getElementById('btn-refresh').style.display = 'block';
+            document.getElementById('money-tag').style.display = 'block';
+          }
         }
-      } catch (err) { console.error(err); }
+      } catch(e){}
     }
-
-    // Init with initial server data passed in template if desired, 
-    // but here we just trigger first fetch or use placeholders
-    // Trigger first animation immediately
-    setTimeout(resetProgressBar, 100);
-    
-    // Start interval
-    setInterval(() => {
-      if (updatesLeft > 0) fetchHealth();
-    }, 10000);
+    setTimeout(() => { updateUI(${JSON.stringify(health)}); resetBar(); }, 100);
+    setInterval(() => tick(), 10000);
   </script>
 </body>
 </html>
-  `);
+    `);
 });
 
 router.get('/health/json', async (req, res) => {
@@ -719,7 +346,4 @@ router.get('/health/json', async (req, res) => {
     res.json({ service: 'troo-earth-api', ...health });
 });
 
-module.exports = {
-    healthRouter: router,
-    markRequest,
-};
+module.exports = { healthRouter: router, markRequest };

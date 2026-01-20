@@ -21,8 +21,8 @@ async function loginUserController(req, res, next) {
         user_id: user.user_id,
         fullname: user.fullname,
         email: user.email,
-        //role: user.role,        // future RBAC
-        //org_id: user.org_id     // if applicable
+        role: user.role,        
+        org_id: user.org_id    
       };
 
       return res.success('Login successful', {

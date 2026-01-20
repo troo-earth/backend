@@ -21,29 +21,31 @@ const K_LAST_REQ = 'health:global:last_request';
    Request tracker & Metrics (Redis)
 -------------------------------- */
 function markRequest(req, res) {
-    const path = req.originalUrl || req.path;
-    if (path === '/' || path.startsWith('/health') || path.includes('favicon')) return;
+  const path = req.originalUrl || req.path;
+  if (path === '/' || path.startsWith('/health') || path.includes('favicon')) return;
 
-    const start = process.hrtime();
-    const lastReqData = JSON.stringify({
-        time: new Date(),
-        ip: req.ip,
-        path: path,
-        method: req.method
+  const start = process.hrtime();
+  const lastReqData = JSON.stringify({
+    time: new Date(),
+    ip: req.ip,
+    path: path,
+    method: req.method
+  });
+
+  redisClient.set(K_LAST_REQ, lastReqData).catch(() => { });
+  redisClient.incr(K_REQ_TOTAL).catch(() => { });
+
+  if (res && typeof res.on === 'function') {
+    res.on('finish', () => {
+      const diff = process.hrtime(start);
+      const timeMs = (diff[0] * 1e9 + diff[1]) / 1e6;
+      redisClient.incr(K_RES_COUNT).catch(() => { });
+      redisClient.incrByFloat(K_RES_TIME, timeMs).catch(() => { });
+      if (res.statusCode >= 500) {
+        redisClient.incr(K_REQ_ERRORS).catch(() => { });
+      }
     });
-    
-    redisClient.set(K_LAST_REQ, lastReqData).catch(() => {});
-    redisClient.incr(K_REQ_TOTAL).catch(() => {});
-
-    if (res && typeof res.on === 'function') {
-        res.on('finish', () => {
-            const diff = process.hrtime(start);
-            const timeMs = (diff[0] * 1e9 + diff[1]) / 1e6;
-            redisClient.incr(K_RES_COUNT).catch(() => {});
-            redisClient.incrByFloat(K_RES_TIME, timeMs).catch(() => {});
-            if (res.statusCode >= 400) redisClient.incr(K_REQ_ERRORS).catch(() => {});
-        });
-    }
+  }
 }
 
 /* -------------------------------
@@ -51,97 +53,97 @@ function markRequest(req, res) {
    URL: /reset?key=your_key
 -------------------------------- */
 router.get('/reset', async (req, res) => {
-    const secretKey = process.env.HEALTH_ADMIN_KEY; 
-    if (req.query.key !== secretKey) return res.status(403).send('Unauthorized');
-    try {
-        await redisClient.del([K_REQ_TOTAL, K_REQ_ERRORS, K_RES_TIME, K_RES_COUNT, K_START_TIME, K_LAST_REQ]);
-        await redisClient.set(K_START_TIME, Date.now());
-        res.send({ success: true, message: 'Stats reset successfully' });
-    } catch (err) { res.status(500).send({ success: false, error: err.message }); }
+  const secretKey = process.env.HEALTH_ADMIN_KEY;
+  if (req.query.key !== secretKey) return res.status(403).send('Unauthorized');
+  try {
+    await redisClient.del([K_REQ_TOTAL, K_REQ_ERRORS, K_RES_TIME, K_RES_COUNT, K_START_TIME, K_LAST_REQ]);
+    await redisClient.set(K_START_TIME, Date.now());
+    res.send({ success: true, message: 'Stats reset successfully' });
+  } catch (err) { res.status(500).send({ success: false, error: err.message }); }
 });
 
 /* -------------------------------
    Health data collector
 -------------------------------- */
 async function collectHealth() {
-    let dbStatus = 'disconnected', dbPingMs = null;
-    try {
-        const start = Date.now();
-        await sequelize.authenticate();
-        dbPingMs = Date.now() - start;
-        dbStatus = 'connected';
-    } catch { dbStatus = 'error'; }
+  let dbStatus = 'disconnected', dbPingMs = null;
+  try {
+    const start = Date.now();
+    await sequelize.authenticate();
+    dbPingMs = Date.now() - start;
+    dbStatus = 'connected';
+  } catch { dbStatus = 'error'; }
 
-    let redisStatus = 'disconnected', redisPingMs = null;
-    let stats = { totalRequests: 0, totalErrors: 0, avgResponseTime: 0, uptimeSeconds: 0, lastRequest: null };
+  let redisStatus = 'disconnected', redisPingMs = null;
+  let stats = { totalRequests: 0, totalErrors: 0, avgResponseTime: 0, uptimeSeconds: 0, lastRequest: null };
 
-    try {
-        const start = Date.now();
-        await redisClient.ping();
-        redisPingMs = Date.now() - start;
-        redisStatus = 'connected';
+  try {
+    const start = Date.now();
+    await redisClient.ping();
+    redisPingMs = Date.now() - start;
+    redisStatus = 'connected';
 
-        const [totalReq, totalErr, totalTime, resCount, startTimeStr, lastReqStr] = await Promise.all([
-            redisClient.get(K_REQ_TOTAL), redisClient.get(K_REQ_ERRORS),
-            redisClient.get(K_RES_TIME), redisClient.get(K_RES_COUNT),
-            redisClient.get(K_START_TIME), redisClient.get(K_LAST_REQ)
-        ]);
+    const [totalReq, totalErr, totalTime, resCount, startTimeStr, lastReqStr] = await Promise.all([
+      redisClient.get(K_REQ_TOTAL), redisClient.get(K_REQ_ERRORS),
+      redisClient.get(K_RES_TIME), redisClient.get(K_RES_COUNT),
+      redisClient.get(K_START_TIME), redisClient.get(K_LAST_REQ)
+    ]);
 
-        let startTime = startTimeStr ? parseInt(startTimeStr) : Date.now();
-        if (!startTimeStr) await redisClient.set(K_START_TIME, startTime);
+    let startTime = startTimeStr ? parseInt(startTimeStr) : Date.now();
+    if (!startTimeStr) await redisClient.set(K_START_TIME, startTime);
 
-        stats.totalRequests = parseInt(totalReq || '0');
-        stats.totalErrors = parseInt(totalErr || '0');
-        const timeSum = parseFloat(totalTime || '0'), countSum = parseInt(resCount || '0');
-        stats.avgResponseTime = countSum > 0 ? (timeSum / countSum).toFixed(2) : 0;
-        stats.uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
-        stats.lastRequest = lastReqStr ? JSON.parse(lastReqStr) : null;
-    } catch { redisStatus = 'error'; stats.uptimeSeconds = Math.floor(process.uptime()); }
+    stats.totalRequests = parseInt(totalReq || '0');
+    stats.totalErrors = parseInt(totalErr || '0');
+    const timeSum = parseFloat(totalTime || '0'), countSum = parseInt(resCount || '0');
+    stats.avgResponseTime = countSum > 0 ? (timeSum / countSum).toFixed(2) : 0;
+    stats.uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+    stats.lastRequest = lastReqStr ? JSON.parse(lastReqStr) : null;
+  } catch { redisStatus = 'error'; stats.uptimeSeconds = Math.floor(process.uptime()); }
 
-    const frontendUrl = 'https://dev.troo.earth';
-    let fePing = null;
-    try {
-        const s = Date.now();
-        await axios.get(frontendUrl, { timeout: 3000, validateStatus: () => true });
-        fePing = Date.now() - s;
-    } catch { fePing = null; }
+  const frontendUrl = 'https://dev.troo.earth';
+  let fePing = null;
+  try {
+    const s = Date.now();
+    await axios.get(frontendUrl, { timeout: 3000, validateStatus: () => true });
+    fePing = Date.now() - s;
+  } catch { fePing = null; }
 
-    let strPing = null;
-    try {
-        const s = Date.now();
-        await axios.get('https://api.stripe.com/healthcheck', { timeout: 3000 });
-        strPing = Date.now() - s;
-    } catch { strPing = null; }
+  let strPing = null;
+  try {
+    const s = Date.now();
+    await axios.get('https://api.stripe.com/healthcheck', { timeout: 3000 });
+    strPing = Date.now() - s;
+  } catch { strPing = null; }
 
-    const mem = process.memoryUsage();
-    const successCount = stats.totalRequests - stats.totalErrors;
-    const successRate = stats.totalRequests > 0 ? ((successCount) / stats.totalRequests * 100).toFixed(1) : 100;
+  const mem = process.memoryUsage();
+  const successCount = stats.totalRequests - stats.totalErrors;
+  const successRate = stats.totalRequests > 0 ? ((successCount) / stats.totalRequests * 100).toFixed(1) : 100;
 
-    return {
-        status: (dbStatus === 'connected' && redisStatus === 'connected') ? 'ok' : 'issue',
-        runtime: {
-            uptimeSeconds: stats.uptimeSeconds,
-            memory: { rss: Math.round(mem.rss / 1024 / 1024), heapUsed: Math.round(mem.heapUsed / 1024 / 1024) },
-            cpu: { loadAvg: os.loadavg().map(l => l.toFixed(2)) },
-            platform: `${os.type()} (${os.arch()})`,
-            nodeVersion: process.version
-        },
-        traffic: { totalRequests: stats.totalRequests, successCount, failedCount: stats.totalErrors, successRate, avgResponseTime: stats.avgResponseTime, lastRequest: stats.lastRequest },
-        dependencies: {
-            database: { status: dbStatus, pingMs: dbPingMs },
-            redis: { status: redisStatus, pingMs: redisPingMs },
-            frontend: { status: fePing ? 'reachable' : 'unreachable', pingMs: fePing },
-            stripe: { status: strPing ? 'reachable' : 'unreachable', pingMs: strPing },
-        },
-    };
+  return {
+    status: (dbStatus === 'connected' && redisStatus === 'connected') ? 'ok' : 'issue',
+    runtime: {
+      uptimeSeconds: stats.uptimeSeconds,
+      memory: { rss: Math.round(mem.rss / 1024 / 1024), heapUsed: Math.round(mem.heapUsed / 1024 / 1024) },
+      cpu: { loadAvg: os.loadavg().map(l => l.toFixed(2)) },
+      platform: `${os.type()} (${os.arch()})`,
+      nodeVersion: process.version
+    },
+    traffic: { totalRequests: stats.totalRequests, successCount, failedCount: stats.totalErrors, successRate, avgResponseTime: stats.avgResponseTime, lastRequest: stats.lastRequest },
+    dependencies: {
+      database: { status: dbStatus, pingMs: dbPingMs },
+      redis: { status: redisStatus, pingMs: redisPingMs },
+      frontend: { status: fePing ? 'reachable' : 'unreachable', pingMs: fePing },
+      stripe: { status: strPing ? 'reachable' : 'unreachable', pingMs: strPing },
+    },
+  };
 }
 
 /* -------------------------------
    UI Route
 -------------------------------- */
 router.get('/', async (req, res) => {
-    const health = await collectHealth();
-    res.send(`
+  const health = await collectHealth();
+  res.send(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -190,9 +192,27 @@ router.get('/', async (req, res) => {
     .col:last-child { border-right: none; }
     
     .label { text-transform: uppercase; font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; margin-bottom: 25px; }
-    .big { font-size: 48px; font-weight: 900; color: var(--dark); line-height: 1; letter-spacing: -2px; margin-bottom: 10px; }
-    
-    .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.03); font-size: 15px; font-weight: 700; }
+/* Scaled metrics to prevent wrapping */
+.big { 
+  font-size: clamp(24px, 3.5vw, 42px); /* Dynamically shrinks based on container width */
+  font-weight: 900; 
+  color: var(--dark); 
+  line-height: 1; 
+  letter-spacing: -1.5px; 
+  margin-bottom: 10px;
+  white-space: nowrap; /* Forces text to stay on one line */
+}
+
+/* Adjust row font slightly for dense data */
+.row { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 8px 0; 
+  border-bottom: 1px solid rgba(0,0,0,0.03); 
+  font-size: 14px; /* Slightly smaller for better fit */
+  font-weight: 700; 
+}
     .row:last-child { border-bottom: none; }
 
     .pill { padding: 5px 12px; border-radius: 10px; font-size: 11px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
@@ -283,7 +303,17 @@ router.get('/', async (req, res) => {
   <script>
     let left = 3;
     const bar = document.getElementById('progress-bar');
-    const fmt = (s) => { const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=Math.floor(s%60); return h+'h '+m+'m '+sec+'s'; };
+
+const fmt = (s) => { 
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  return d > 0 
+    ? \`\${d}d \${h}h \${m}m\` 
+    : \`\${h}h \${m}m \${sec}s\`; 
+};
+
     const resetBar = () => { bar.style.transition='none'; bar.style.width='0%'; void bar.offsetWidth; bar.style.transition='width 10s linear'; bar.style.width='100%'; };
     
     const updateUI = (d) => {
@@ -333,7 +363,11 @@ router.get('/', async (req, res) => {
         }
       } catch(e){}
     }
-    setTimeout(() => { updateUI(${JSON.stringify(health)}); resetBar(); }, 100);
+    setTimeout(() => { 
+  const data = JSON.parse(\`${JSON.stringify(health).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`);
+  updateUI(data); 
+  resetBar(); 
+}, 100);
     setInterval(() => tick(), 10000);
   </script>
 </body>
@@ -342,8 +376,8 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/health/json', async (req, res) => {
-    const health = await collectHealth();
-    res.json({ service: 'troo-earth-api', ...health });
+  const health = await collectHealth();
+  res.json({ service: 'troo-earth-api', ...health });
 });
 
 module.exports = { healthRouter: router, markRequest };

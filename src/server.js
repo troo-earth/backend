@@ -11,6 +11,7 @@ const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
 const tradingRoutes = require('./modules/trading/tradingRoutes');
 const uploadRoutes = require('./modules/uploads/uploadRoutes');
 const transactionsRoutes = require('./modules/transactions/transactionsRoutes');
+const retirementRoutes = require('./modules/reitrements/retirementRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
@@ -99,6 +100,7 @@ app.use('/api/v1/holdings', holdingsRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
 app.use('/api/v1/trading', tradingRoutes);
 app.use('/api/v1/transactions', transactionsRoutes);
+app.use('/api/v1/retirements', retirementRoutes);
 
 app.use(errorHandler);
 

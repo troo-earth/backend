@@ -1,24 +1,15 @@
 const {
-  viewAllRetirementsService,
-  viewOrgRetirementsService,
+  viewOrgRetirementService,
+  viewOneRetirementService,
 } = require('./retirementService');
 const { withLogging } = require('../../utils/logger');
+const { validate: uuidValidate } = require('uuid');
 
-const viewAllRetirementsController = async (req, res, next) => {
-  try {
-    const result = await viewAllRetirementsService();
-    return res.success('All retirements fetched successfully', result.data);
-  } catch (error) {
-    next(error);
-  }
-};
-
-const viewOrgRetirementsController = async (req, res, next) => {
+const viewOrgRetirementController = async (req, res, next) => {
   try {
     const org_id = req.session?.user?.org_id;
 
-    const result = await viewOrgRetirementsService(org_id);
-
+    const result = await viewOrgRetirementService(org_id);
     if (result.error) {
       return res.error(result.error, result.statusCode);
     }
@@ -32,7 +23,43 @@ const viewOrgRetirementsController = async (req, res, next) => {
   }
 };
 
+const viewOneRetirementController = async (req, res, next) => {
+  try {
+    const certificate_id = req.body?.certificate_id;
+
+    if (!certificate_id) {
+      return res.error(
+        'certificate_id is required',
+        400
+      );
+    }
+
+    if (!uuidValidate(certificate_id)) {
+      return res.error(
+        'Invalid certificate_id format',
+        400
+      );
+    }
+
+    const result = await viewOneRetirementService(certificate_id);
+
+    if (result.error) {
+      return res.error(result.error, result.statusCode);
+    }
+
+    return res.success(
+      'Retirement certificate fetched successfully',
+      result.data
+    );
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
 module.exports = {
-    viewAllRetirementsController: withLogging(viewAllRetirementsController, 'viewAllRetirementsController'),
-    viewOrgRetirementsController: withLogging(viewOrgRetirementsController, 'viewOrgRetirementsController'),
+  viewOrgRetirementController: withLogging(viewOrgRetirementController, 'viewOrgRetirementController'),
+  viewOneRetirementController: withLogging(viewOneRetirementController, 'viewOneRetirementController'),
 };

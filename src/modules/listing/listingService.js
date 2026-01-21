@@ -40,7 +40,24 @@ const getAllListingsService = async () => {
     }
 };
 
+const getOrgListingsService = async (org_id) => {
+  if (!org_id) {
+    return {
+      error: 'Organization not associated with user',
+      statusCode: 403,
+    };
+  }
+
+  const listings = await Listing.findAll({
+    where: { seller_id: org_id },
+    order: [['createdAt', 'DESC']],
+  });
+
+  return { data: listings };
+};
+
 module.exports = {
     createListingService: withLogging(createListingService, 'createListingService'),
     getAllListingsService: withLogging(getAllListingsService, 'getAllListingsService'),
+    getOrgListingsService: withLogging(getOrgListingsService, 'getOrgListingsService'),
 };

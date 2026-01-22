@@ -14,6 +14,12 @@ const Org = sequelize.define('Org', {
     unique: true,
   },
 
+  org_code: {
+    type: DataTypes.STRING(10),
+    allowNull: false,
+    unique: true,
+  },
+
   country_code: {
     type: DataTypes.STRING(2),   // ISO-2 (US, IN, DE)
     allowNull: false,

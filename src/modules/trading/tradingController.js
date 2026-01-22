@@ -5,6 +5,7 @@ const {
 } = require('./tradingService');
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
+
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 async function buyCreditsController(req, res, next) {
@@ -118,49 +119,52 @@ async function sellCreditsController(req, res, next) {
 
 async function transferCreditsController(req, res, next) {
   try {
-    const { from_org_id, to_org_id, project_id, amount } = req.body || {};
+    const from_org_id = req.session?.user?.org_id;
+    const { to_org_code, project_id, amount } = req.body || {};
 
-    // Basic HTTP-level check for required fields
-    if (!from_org_id || !to_org_id || !project_id || !amount) {
+    if (!from_org_id) {
+      return res.error('User not associated with an organization', 403);
+    }
+
+    if (!to_org_code || !project_id || !amount) {
       return res.error('Missing required fields', 400);
     }
 
-    // Validate UUID format for from_org_id, to_org_id, and project_id
-    if (!uuidValidate(from_org_id)) {
-      return res.error('Invalid UUID format for from_org_id', 400);
-    }
-    if (!uuidValidate(to_org_id)) {
-      return res.error('Invalid UUID format for to_org_id', 400);
-    }
     if (!uuidValidate(project_id)) {
       return res.error('Invalid UUID format for project_id', 400);
     }
 
-    // Additional validation for amount
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       return res.error('Amount must be a positive number', 400);
     }
 
-    const result = await transferCreditsService(from_org_id, to_org_id, project_id, parsedAmount);
+    const result = await transferCreditsService(
+      from_org_id,
+      to_org_code,
+      project_id,
+      parsedAmount
+    );
 
-    // No sanitization needed; result is already safe
-    return res.status(201).success('Transfer successful', result);
+    return res.success('Transfer successful', result);
+
   } catch (error) {
     const statusMap = {
       'Cannot transfer to the same organization': 400,
       'Sender has no holdings': 404,
       'Insufficient available credits to transfer': 400,
-      // Add more mappings as needed for other service errors
+      'Target organization not found': 404,
     };
 
-    const status = statusMap[error.message] || 500;
-    if (status !== 500) {
+    const status = statusMap[error.message];
+    if (status) {
       return res.error(error.message, status);
     }
-    next(error);  // Pass unexpected errors to global handler
+
+    next(error);
   }
 }
+
 
 const retireCreditsController = async (req, res) => {
   try {

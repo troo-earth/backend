@@ -201,77 +201,100 @@ const sellCreditsService = async (org_id, project_id, amount, price) => {
 };
 
 const transferCreditsService = async (
-    from_org_id,
-    to_org_id,
-    project_id,
-    amount
+  from_org_id,
+  to_org_code,
+  project_id,
+  amount
 ) => {
-    const t = await sequelize.transaction();
+  const t = await sequelize.transaction();
 
-    try {
-        if (from_org_id === to_org_id)
-            throw new Error("Cannot transfer to the same organization");
+  try {
+    // 1️⃣ Resolve destination org by org_code
+    const toOrg = await Org.findOne({
+      where: { org_code: to_org_code },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
 
-        // 1. Sender holdings
-        const sender = await Holdings.findOne({
-            where: { org_id: from_org_id, project_id },
-            transaction: t,
-            lock: t.LOCK.UPDATE
-        });
-
-        if (!sender) throw new Error("Sender has no holdings");
-
-        const available =
-            parseFloat(sender.credit_balance) -
-            parseFloat(sender.locked_for_sale);
-
-        if (available < amount)
-            throw new Error("Insufficient available credits to transfer");
-
-        // 2. Deduct from sender
-        sender.credit_balance =
-            (parseFloat(sender.credit_balance) - amount).toFixed(2);
-        await sender.save({ transaction: t });
-
-        // 3. Receiver holdings
-        let receiver = await Holdings.findOne({
-            where: { org_id: to_org_id, project_id },
-            transaction: t,
-            lock: t.LOCK.UPDATE
-        });
-
-        if (!receiver) {
-            receiver = await Holdings.create({
-                org_id: to_org_id,
-                project_id,
-                credit_balance: amount
-            }, { transaction: t });
-        } else {
-            receiver.credit_balance =
-                (parseFloat(receiver.credit_balance) + amount).toFixed(2);
-            await receiver.save({ transaction: t });
-        }
-
-        await Transactions.create({
-            type: 'transfer',
-            from_org_id: from_org_id,
-            to_org_id: to_org_id,
-            project_id,
-            amount
-        }, { transaction: t });
-
-        await t.commit();
-
-        return {
-            success: true,
-            message: "Transfer successful",
-            transferred: amount
-        };
-
-    } catch (err) {
-        await t.rollback();
-        throw err;
+    if (!toOrg) {
+      throw new Error('Target organization not found');
     }
+
+    const to_org_id = toOrg.org_id;
+
+    if (from_org_id === to_org_id) {
+      throw new Error('Cannot transfer to the same organization');
+    }
+
+    // 2️⃣ Sender holdings
+    const sender = await Holdings.findOne({
+      where: { org_id: from_org_id, project_id },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
+    if (!sender) {
+      throw new Error('No Holdings found for this project');
+    }
+
+    const available =
+      parseFloat(sender.credit_balance) -
+      parseFloat(sender.locked_for_sale);
+
+    if (available < amount) {
+      throw new Error('Insufficient available credits to transfer');
+    }
+
+    // 3️⃣ Deduct from sender
+    sender.credit_balance =
+      (parseFloat(sender.credit_balance) - amount).toFixed(2);
+    await sender.save({ transaction: t });
+
+    // 4️⃣ Receiver holdings
+    let receiver = await Holdings.findOne({
+      where: { org_id: to_org_id, project_id },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
+    if (!receiver) {
+      receiver = await Holdings.create(
+        {
+          org_id: to_org_id,
+          project_id,
+          credit_balance: amount,
+        },
+        { transaction: t }
+      );
+    } else {
+      receiver.credit_balance =
+        (parseFloat(receiver.credit_balance) + amount).toFixed(2);
+      await receiver.save({ transaction: t });
+    }
+
+    // 5️⃣ Transaction record
+    await Transactions.create(
+      {
+        type: 'transfer',
+        from_org_id,
+        to_org_id,
+        project_id,
+        amount,
+      },
+      { transaction: t }
+    );
+
+    await t.commit();
+
+    return {
+      transferred: amount,
+      to_org_code,
+    };
+
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
 };
 
 const retireCreditsService = async (

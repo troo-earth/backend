@@ -1,6 +1,19 @@
 const Org = require('./orgModel');
 const { withLogging } = require('../../utils/logger');
 const User = require('../user/userModel');
+const { v4: uuidv4 } = require('uuid');
+
+function generateOrgCode(org_name, org_id) {
+  const prefix = org_name
+    .replace(/[^A-Za-z]/g, '')
+    .slice(0, 2)
+    .toUpperCase()
+    .padEnd(2, 'X');
+
+  const suffix = org_id.replace(/-/g, '').slice(0, 6).toUpperCase();
+
+  return `${prefix}-${suffix}`;
+}
 
 async function createOrgService(payload, sessionUser) {
   const {
@@ -19,8 +32,14 @@ async function createOrgService(payload, sessionUser) {
     throw new Error('Unauthenticated');
   }
 
+  // Generate org_id manually so we can derive org_code
+  const org_id = uuidv4();
+  const org_code = generateOrgCode(org_name, org_id);
+
   // 1️⃣ Create org
   const org = await Org.create({
+    org_id,
+    org_code,               
     org_name: org_name.trim(),
     country_code: country_code.toUpperCase(),
     registration_id,
@@ -37,14 +56,6 @@ async function createOrgService(payload, sessionUser) {
   return org;
 }
 
-module.exports = {
-  createOrgService,
-};
-
-
-/**
- * Get org by ID
- */
 async function getOrgByIdService(org_id) {
   if (!org_id) throw new Error('Missing org_id');
 
@@ -54,9 +65,6 @@ async function getOrgByIdService(org_id) {
   return org;
 }
 
-/**
- * Update org details
- */
 async function updateOrgService(org_id, updateFields) {
   if (!org_id) throw new Error('Missing org_id');
   if (!updateFields || Object.keys(updateFields).length === 0) {

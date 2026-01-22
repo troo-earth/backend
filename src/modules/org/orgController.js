@@ -38,10 +38,13 @@ async function createOrgController(req, res, next) {
 
 async function getOrgByIdController(req, res, next) {
   try {
-    const { id: org_id } = req.params;
+    const org_id = req.session?.user?.org_id;
 
     if (!org_id) {
-      return res.error('Missing org_id', 400);
+      return res.error(
+        'User is not associated with any organization',
+        403
+      );
     }
 
     const org = await getOrgByIdService(org_id);
@@ -53,7 +56,6 @@ async function getOrgByIdController(req, res, next) {
 
   } catch (error) {
     const statusMap = {
-      'Missing org_id': 400,
       'Org not found': 404,
     };
 
@@ -65,6 +67,7 @@ async function getOrgByIdController(req, res, next) {
     next(error);
   }
 }
+
 
 async function updateOrgController(req, res, next) {
   try {

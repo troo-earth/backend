@@ -151,7 +151,7 @@ async function transferCreditsController(req, res, next) {
   } catch (error) {
     const statusMap = {
       'Cannot transfer to the same organization': 400,
-      'Sender has no holdings': 404,
+      'No Holdings found for this project': 404,
       'Insufficient available credits to transfer': 400,
       'Target organization not found': 404,
     };

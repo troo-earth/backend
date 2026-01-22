@@ -234,7 +234,7 @@ const transferCreditsService = async (
     });
 
     if (!sender) {
-      throw new Error('Sender has no holdings');
+      throw new Error('No Holdings found for this project');
     }
 
     const available =

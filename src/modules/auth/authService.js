@@ -32,8 +32,8 @@ async function verifyUserService(sessionUser) {
     user_id: sessionUser.user_id,
     email: sessionUser.email,
     fullname: sessionUser.fullname,
-    // role: sessionUser.role,
-    // org_id: sessionUser.org_id
+    role: sessionUser.role,
+    org_id: sessionUser.org_id
   };
 }
 

@@ -10,13 +10,17 @@ const listingRoutes = require('./modules/listing/listingRoutes');
 const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
 const tradingRoutes = require('./modules/trading/tradingRoutes');
 const uploadRoutes = require('./modules/uploads/uploadRoutes');
+const transactionsRoutes = require('./modules/transactions/transactionsRoutes');
+const retirementRoutes = require('./modules/reitrements/retirementRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
 const globalRouteLogger = require('./middleware/routeLogger');
 const sessionMiddleware = require('./config/session');
+const redisClient = require('./config/redis');
 const authMiddelware = require('./middleware/authMiddleware');
 const { tracingMiddleware } = require('./middleware/tracingMiddleware');
+const { healthRouter, markRequest } = require('./utils/health');
 
 const app = express();
 const cors = require('cors');
@@ -29,6 +33,11 @@ app.post(
   express.raw({ type: 'application/json' }),
   buildStripeWebhookExpressHandler()
 );
+
+app.use((req, res, next) => {
+  markRequest(req, res); 
+  next();
+});
 
 // Middleware (same as before)
 app.use(express.json());
@@ -78,33 +87,21 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', async (req, res) => {
-  try {
-    await sequelize.authenticate();
-    res.json({
-      status: 'API LIVE',
-      database: 'SUPABASE CONNECTED',
-      // ...
-    });
-  } catch (err) {
-    res.status(500).json({
-      status: 'DB ERROR',
-      // ...
-    });
-  }
-});
-
+app.use('/', healthRouter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/trading', tradingRoutes);
 
-app.use(authMiddelware); 
+app.use(authMiddelware);
 
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
 app.use('/api/v1/listings', listingRoutes);
 app.use('/api/v1/holdings', holdingsRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
+app.use('/api/v1/trading', tradingRoutes);
+app.use('/api/v1/transactions', transactionsRoutes);
+app.use('/api/v1/retirements', retirementRoutes);
 
 app.use(errorHandler);
 
@@ -112,10 +109,10 @@ app.use(errorHandler);
 // Only start the server when running locally (not on Vercel)
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const PORT = process.env.PORT || 3000;
-  
+
   app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/health`);
+    console.log(`Health check: http://localhost:${PORT}/`);
   });
 }
 

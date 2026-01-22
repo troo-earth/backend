@@ -1,5 +1,4 @@
-const { createListingService, getAllListingsService } = require('./listingService');
-const { validate: uuidValidate } = require('uuid');
+const { createListingService, getAllListingsService, getOrgListingsService } = require('./listingService');
 const { withLogging } = require('../../utils/logger');
 
 const createListingController = async (req, res) => {
@@ -63,7 +62,37 @@ const getAllListingsController = async (req, res) => {
   }
 };
 
+const getOrgListingsController = async (req, res, next) => {
+  try {
+    const org_id = req.session?.user?.org_id;
+
+    // User logged in but not linked to org
+    if (!org_id) {
+      return res.error(
+        'User is not associated with any organization',
+        403
+      );
+    }
+
+    const result = await getOrgListingsService(org_id);
+
+    if (result.error) {
+      return res.error(result.error, result.statusCode);
+    }
+
+    // Empty array is valid
+    return res.success(
+      'Organization listings fetched successfully',
+      result.data
+    );
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createListingController: withLogging(createListingController, 'createListingController'),
   getAllListingsController: withLogging(getAllListingsController, 'getAllListingsController'),
+  getOrgListingsController: withLogging(getOrgListingsController, 'getOrgListingsController'),
 };

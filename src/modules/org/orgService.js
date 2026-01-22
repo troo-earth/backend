@@ -1,7 +1,7 @@
-const Org = require('./orgModel');
 const { withLogging } = require('../../utils/logger');
-const User = require('../user/userModel');
 const { v4: uuidv4 } = require('uuid');
+const User = require('../user/userModel');
+const Org = require('./orgModel');
 
 function generateOrgCode(org_name, org_id) {
   const prefix = org_name
@@ -62,7 +62,20 @@ async function getOrgByIdService(org_id) {
   const org = await Org.findByPk(org_id);
   if (!org) throw new Error('Org not found');
 
-  return org;
+  const employees = await User.findAll({
+    where: { org_id },
+    attributes: [
+      'user_id',
+      'fullname',
+      'email',
+      'user_name',
+    ],
+  });
+
+  return {
+    ...org.toJSON(),
+    employees,
+  };
 }
 
 async function updateOrgService(org_id, updateFields) {

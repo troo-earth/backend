@@ -1,5 +1,6 @@
-const { createListingService, getAllListingsService, getOrgListingsService } = require('./listingService');
+const { createListingService, getAllListingsService, getOrgListingsService, getListingByIdService } = require('./listingService');
 const { withLogging } = require('../../utils/logger');
+const { validate: uuidValidate } = require('uuid');
 
 const createListingController = async (req, res) => {
   try {
@@ -91,8 +92,37 @@ const getOrgListingsController = async (req, res, next) => {
   }
 };
 
+async function getListingByIdController(req, res, next) {
+  try {
+    const { listing_id } = req.params;
+
+    if (!listing_id) {
+      return res.error('listing_id is required', 400);
+    }
+
+    if (!uuidValidate(listing_id)) {
+      return res.error('Invalid listing_id format', 400);
+    }
+
+    const result = await getListingByIdService(listing_id);
+
+    if (result.error) {
+      return res.error(result.error, result.statusCode);
+    }
+
+    return res.success(
+      'Listing fetched successfully',
+      result.data
+    );
+
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   createListingController: withLogging(createListingController, 'createListingController'),
   getAllListingsController: withLogging(getAllListingsController, 'getAllListingsController'),
   getOrgListingsController: withLogging(getOrgListingsController, 'getOrgListingsController'),
+  getListingByIdController: withLogging(getListingByIdController, 'getListingByIdController'),
 };

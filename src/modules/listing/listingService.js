@@ -1,5 +1,7 @@
 // src/modules/listing/listingService.js
 const Listing = require('./listingModel.js');
+const IcrProject = require('../marketplace/models/icrProjects');
+const Org = require('../org/orgModel');
 const { withLogging } = require('../../utils/logger');
 
 const createListingService = async (listingData) => {
@@ -56,8 +58,55 @@ const getOrgListingsService = async (org_id) => {
   return { data: listings };
 };
 
+async function getListingByIdService(listing_id) {
+  if (!listing_id) {
+    return { error: 'listing_id is required', statusCode: 400 };
+  }
+
+  const listing = await Listing.findByPk(listing_id);
+  if (!listing) {
+    return { error: 'Listing not found', statusCode: 404 };
+  }
+
+  // Fetch project
+  const project = await IcrProject.findByPk(listing.project_id);
+  if (!project) {
+    return { error: 'Project not found for listing', statusCode: 404 };
+  }
+
+  // Seller logic
+  let seller;
+  if (listing.seller_id) {
+    const org = await Org.findByPk(listing.seller_id);
+    seller = org
+      ? {
+          type: 'org',
+          org_id: org.org_id,
+          org_name: org.org_name,
+          org_code: org.org_code,
+        }
+      : { type: 'unknown' };
+  } else {
+    seller = {
+      type: 'registry',
+      name: listing.registry || 'Registry',
+    };
+  }
+
+  return {
+    data: {
+      listing_id: listing.listing_id,
+      price_per_credit: listing.price_per_credit,
+      credits_available: listing.credits_available,
+      seller,
+      project,
+    },
+  };
+}
+
 module.exports = {
     createListingService: withLogging(createListingService, 'createListingService'),
     getAllListingsService: withLogging(getAllListingsService, 'getAllListingsService'),
     getOrgListingsService: withLogging(getOrgListingsService, 'getOrgListingsService'),
+    getListingByIdService: withLogging(getListingByIdService, 'getListingByIdService'),
 };

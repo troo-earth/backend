@@ -1,5 +1,5 @@
 const ListingEvent = require('./listingEventsModel');
-const { withLogger } = require('../../utils/logger');
+const { withLogging } = require('../../utils/logger');
 
 async function createListingEvent({
   listing_id,
@@ -20,5 +20,5 @@ async function createListingEvent({
 }
 
 module.exports = {
-  createListingEvent: withLogger(createListingEvent, 'createListingEvent'),
+  createListingEvent: withLogging(createListingEvent, 'createListingEvent'),
 };

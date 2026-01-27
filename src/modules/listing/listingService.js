@@ -1,45 +1,66 @@
 // src/modules/listing/listingService.js
-const Listing = require('./listingModel.js');
+const Listing = require('./listingModel');
 const IcrProject = require('../marketplace/models/icrProjects');
 const Org = require('../org/orgModel');
 const { withLogging } = require('../../utils/logger');
+const sequelize  = require('../../config/database');
+const { createListingEvent } = require('../listingEvents/listingEventsService');
 
 const createListingService = async (listingData) => {
-    try {
-        const newListing = await Listing.create({
-            project_id: listingData.project_id,
-            seller_id: listingData.seller_id || null, // Optional
-            credits_available: listingData.credits_available,
-            price_per_credit: listingData.price_per_credit,
-            external_trade_id: listingData.external_trade_id || null,
-            project_name: listingData.project_name,
-            project_start_year: listingData.project_start_year,
-            registry: listingData.registry,
-            category: listingData.category,
-            location_city: listingData.location_city,
-            location_state: listingData.location_state,
-            location_country: listingData.location_country,
-            thumbnail_url: listingData.thumbnail_url,
-            status: listingData.status || 'open', // Default to 'open'
-            sdg_numbers: listingData.sdg_numbers || null,
-            methodology: listingData.methodology,
-            vintage_year: listingData.vintage_year || null,
-        });
-        return newListing;
-    } catch (error) {
-        throw new Error(`Failed to create listing: ${error.message}`);
-    }
+  const t = await sequelize.transaction();
+  try {
+    const listing = await Listing.create({
+      project_id: listingData.project_id,
+      seller_id: listingData.seller_id || null, // Optional
+      credits_available: listingData.credits_available,
+      price_per_credit: listingData.price_per_credit,
+      external_trade_id: listingData.external_trade_id || null,
+      project_name: listingData.project_name,
+      project_start_year: listingData.project_start_year,
+      registry: listingData.registry,
+      category: listingData.category,
+      location_city: listingData.location_city,
+      location_state: listingData.location_state,
+      location_country: listingData.location_country,
+      thumbnail_url: listingData.thumbnail_url,
+      status: listingData.status || 'open', // Default to 'open'
+      sdg_numbers: listingData.sdg_numbers || null,
+      methodology: listingData.methodology,
+      vintage_year: listingData.vintage_year || null,
+    },
+      { transaction: t }
+    );
+
+    await createListingEvent({
+      listing_id: listing.listing_id,
+      event_type: 'CREATED',
+      actor_org_code: null, // SYSTEM / REGISTRY
+      event_data: {
+        price_per_credit: listing.price_per_credit,
+        credits_available: listing.credits_available,
+        source: 'registry',
+      },
+      transaction: t,
+    });
+
+    await t.commit();
+    return listing;
+
+  } catch (error) {
+    await t.rollback();
+    throw new Error(`Failed to create listing: ${error.message}`);
+  }
 };
 
 const getAllListingsService = async () => {
-    try {
-        const listings = await Listing.findAll({
-            attributes: { exclude: ['createdAt', 'updatedAt'] }, // Optional: exclude timestamps if not needed
-        });
-        return listings;
-    } catch (error) {
-        throw new Error(`Failed to fetch listings: ${error.message}`);
-    }
+  try {
+    const listings = await Listing.findAll({
+      attributes: { exclude: ['createdAt', 'updatedAt'] }, // Optional: exclude timestamps if not needed
+    });
+    return listings;
+  } catch (error) {
+    throw new Error(`Failed to fetch listings: ${error.message}`);
+  }
 };
 
 const getAllActiveListingsService = async () => {
@@ -119,11 +140,11 @@ async function getListingByIdService(listing_id) {
     const org = await Org.findByPk(listing.seller_id);
     seller = org
       ? {
-          type: 'org',
-          org_id: org.org_id,
-          org_name: org.org_name,
-          org_code: org.org_code,
-        }
+        type: 'org',
+        org_id: org.org_id,
+        org_name: org.org_name,
+        org_code: org.org_code,
+      }
       : { type: 'unknown' };
   } else {
     seller = {
@@ -144,12 +165,12 @@ async function getListingByIdService(listing_id) {
 }
 
 module.exports = {
-    createListingService: withLogging(createListingService, 'createListingService'),
-    getAllListingsService: withLogging(getAllListingsService, 'getAllListingsService'),
-    getOrgListingsService: withLogging(getOrgListingsService, 'getOrgListingsService'),
-    getListingByIdService: withLogging(getListingByIdService, 'getListingByIdService'),
-    getAllActiveListingsService: withLogging(getAllActiveListingsService, 'getAllActiveListingsService'),
-    getAllClosedListingsService: withLogging(getAllClosedListingsService, 'getAllClosedListingsService'),
-    getOrgActiveListingsService: withLogging(getOrgActiveListingsService, 'getOrgActiveListingsService'),
-    getOrgClosedListingsService: withLogging(getOrgClosedListingsService, 'getOrgClosedListingsService'),
+  createListingService: withLogging(createListingService, 'createListingService'),
+  getAllListingsService: withLogging(getAllListingsService, 'getAllListingsService'),
+  getOrgListingsService: withLogging(getOrgListingsService, 'getOrgListingsService'),
+  getListingByIdService: withLogging(getListingByIdService, 'getListingByIdService'),
+  getAllActiveListingsService: withLogging(getAllActiveListingsService, 'getAllActiveListingsService'),
+  getAllClosedListingsService: withLogging(getAllClosedListingsService, 'getAllClosedListingsService'),
+  getOrgActiveListingsService: withLogging(getOrgActiveListingsService, 'getOrgActiveListingsService'),
+  getOrgClosedListingsService: withLogging(getOrgClosedListingsService, 'getOrgClosedListingsService'),
 };

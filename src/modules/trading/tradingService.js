@@ -6,6 +6,7 @@ const IcrProject = require('../marketplace/models/icrProjects.js');
 const Org = require('../org/orgModel.js');
 const sequelize = require('../../config/database.js');
 const { withLogging } = require('../../utils/logger.js');
+const { createListingEvent } = require('../listingEvents/listingEventsService.js');
 
 const buyCreditsService = async (
     listing_id,
@@ -111,32 +112,36 @@ const buyCreditsService = async (
 
 const sellCreditsService = async (org_id, project_id, amount, price) => {
     const t = await sequelize.transaction();
+
     try {
-        // 1. Get seller holdings for this project
+        const org = await Org.findByPk(org_id, {
+            attributes: ['org_code'],
+            transaction: t
+        });
+        if (!org) throw new Error('Org not found');
+        console.log('Organization found:', org.org_code);
         const holding = await Holdings.findOne({
             where: { org_id, project_id },
             transaction: t,
             lock: t.LOCK.UPDATE
         });
         if (!holding) throw new Error('No holdings found for this project');
+
         if (parseFloat(holding.credit_balance) < amount)
             throw new Error('Insufficient credits to sell');
 
-        // Fetch project details from icrProject
         const project = await IcrProject.findByPk(project_id, { transaction: t });
         if (!project) throw new Error('Project not found');
 
-        // Extract year from startDate for project_start_year
-        const startDate = project.startDate; // Assuming this is a Date or ISO string
-        const projectStartYear = new Date(startDate).getFullYear();
+        const projectStartYear = new Date(project.startDate).getFullYear();
 
-        // Extract SDG numbers from otherBenefits
-        const sdg_numbers = project.otherBenefits.map(b => {
-            const match = b.title.match(/SDG (\d+):/);
-            return match ? parseInt(match[1]) : null;
-        }).filter(n => n !== null);
+        const sdg_numbers = project.otherBenefits
+            .map(b => {
+                const match = b.title.match(/SDG (\d+):/);
+                return match ? Number(match[1]) : null;
+            })
+            .filter(Boolean);
 
-        // Check if similar listing already exists
         const existingListing = await Listing.findOne({
             where: {
                 seller_id: org_id,
@@ -144,157 +149,184 @@ const sellCreditsService = async (org_id, project_id, amount, price) => {
                 price_per_credit: price,
                 status: 'open'
             },
-            transaction: t
+            transaction: t,
+            lock: t.LOCK.UPDATE
         });
+
+        // 🔁 MERGE
         if (existingListing) {
-            // Increase available credits instead of creating new listing
             existingListing.credits_available =
                 (parseFloat(existingListing.credits_available) + amount).toFixed(2);
+
             await existingListing.save({ transaction: t });
-            holding.locked_for_sale = (parseFloat(holding.locked_for_sale || 0) + amount).toFixed(2);
+
+            holding.locked_for_sale =
+                (parseFloat(holding.locked_for_sale) + amount).toFixed(2);
+
             await holding.save({ transaction: t });
+
+            await createListingEvent({
+                listing_id: existingListing.listing_id,
+                event_type: 'UPDATED',
+                actor_org_code: org.org_code,
+                event_data: {
+                    credits_added: amount,
+                    new_credits_available: existingListing.credits_available,
+                    price_per_credit: existingListing.price_per_credit
+                },
+                transaction: t
+            });
+
             await t.commit();
             return {
-                success: true,
-                message: 'Listing updated (merged with existing open listing)',
                 listing_id: existingListing.listing_id,
-                total_available: existingListing.credits_available
+                credits_available: existingListing.credits_available
             };
         }
 
-        // 2. Move credits to locked_for_sale
-        holding.locked_for_sale = (parseFloat(holding.locked_for_sale || 0) + amount).toFixed(2);
+        // 🆕 CREATE
+        holding.locked_for_sale =
+            (parseFloat(holding.locked_for_sale) + amount).toFixed(2);
+
         await holding.save({ transaction: t });
 
-        // 3. Create listing with required fields from project
         const listing = await Listing.create({
             seller_id: org_id,
             project_id,
             credits_available: amount,
             price_per_credit: price,
             status: 'open',
-            project_name: project.fullName || project.shortDescription, // Use appropriate field if fullName is the name
+            project_name: project.fullName || project.shortDescription,
             project_start_year: projectStartYear,
             registry: project.registry,
-            category: project.sector.title, // Assuming category is sector.title
+            category: project.sector.title,
             location_city: project.city,
             location_state: project.state,
-            location_country: project.countryCode, // Map to full name if needed, e.g., 'US' to 'United States'
+            location_country: project.countryCode,
             thumbnail_url: project.thumbnail,
             methodology: project.methodology.title || project.methodology.id,
             vintage_year: projectStartYear,
-            sdg_numbers: sdg_numbers // Now as array; assume model field is ARRAY type
+            sdg_numbers
         }, { transaction: t });
 
-        await t.commit();
-
-        return {
-            success: true,
-            message: 'Listing created for sale',
+        await createListingEvent({
             listing_id: listing.listing_id,
-            locked_for_sale: holding.locked_for_sale
+            event_type: 'CREATED',
+            actor_org_code: org.org_code,
+            event_data: {
+                credits_available: listing.credits_available,
+                price_per_credit: listing.price_per_credit
+            },
+            transaction: t
+        });
+
+        await t.commit();
+        return {
+            listing_id: listing.listing_id,
+            credits_available: listing.credits_available
         };
-    } catch (error) {
-        if (t) await t.rollback();
-        throw error; // Rethrow original error without wrapping
+
+    } catch (err) {
+        await t.rollback();
+        throw err;
     }
 };
 
 const transferCreditsService = async (
-  from_org_id,
-  to_org_code,
-  project_id,
-  amount
+    from_org_id,
+    to_org_code,
+    project_id,
+    amount
 ) => {
-  const t = await sequelize.transaction();
+    const t = await sequelize.transaction();
 
-  try {
-    // 1️⃣ Resolve destination org by org_code
-    const toOrg = await Org.findOne({
-      where: { org_code: to_org_code },
-      transaction: t,
-      lock: t.LOCK.UPDATE,
-    });
+    try {
+        // 1️⃣ Resolve destination org by org_code
+        const toOrg = await Org.findOne({
+            where: { org_code: to_org_code },
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+        });
 
-    if (!toOrg) {
-      throw new Error('Target organization not found');
+        if (!toOrg) {
+            throw new Error('Target organization not found');
+        }
+
+        const to_org_id = toOrg.org_id;
+
+        if (from_org_id === to_org_id) {
+            throw new Error('Cannot transfer to the same organization');
+        }
+
+        // 2️⃣ Sender holdings
+        const sender = await Holdings.findOne({
+            where: { org_id: from_org_id, project_id },
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+        });
+
+        if (!sender) {
+            throw new Error('No Holdings found for this project');
+        }
+
+        const available =
+            parseFloat(sender.credit_balance) -
+            parseFloat(sender.locked_for_sale);
+
+        if (available < amount) {
+            throw new Error('Insufficient available credits to transfer');
+        }
+
+        // 3️⃣ Deduct from sender
+        sender.credit_balance =
+            (parseFloat(sender.credit_balance) - amount).toFixed(2);
+        await sender.save({ transaction: t });
+
+        // 4️⃣ Receiver holdings
+        let receiver = await Holdings.findOne({
+            where: { org_id: to_org_id, project_id },
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+        });
+
+        if (!receiver) {
+            receiver = await Holdings.create(
+                {
+                    org_id: to_org_id,
+                    project_id,
+                    credit_balance: amount,
+                },
+                { transaction: t }
+            );
+        } else {
+            receiver.credit_balance =
+                (parseFloat(receiver.credit_balance) + amount).toFixed(2);
+            await receiver.save({ transaction: t });
+        }
+
+        // 5️⃣ Transaction record
+        await Transactions.create(
+            {
+                type: 'transfer',
+                from_org_id,
+                to_org_id,
+                project_id,
+                amount,
+            },
+            { transaction: t }
+        );
+
+        await t.commit();
+
+        return {
+            transferred: amount,
+            to_org_code,
+        };
+
+    } catch (err) {
+        await t.rollback();
+        throw err;
     }
-
-    const to_org_id = toOrg.org_id;
-
-    if (from_org_id === to_org_id) {
-      throw new Error('Cannot transfer to the same organization');
-    }
-
-    // 2️⃣ Sender holdings
-    const sender = await Holdings.findOne({
-      where: { org_id: from_org_id, project_id },
-      transaction: t,
-      lock: t.LOCK.UPDATE,
-    });
-
-    if (!sender) {
-      throw new Error('No Holdings found for this project');
-    }
-
-    const available =
-      parseFloat(sender.credit_balance) -
-      parseFloat(sender.locked_for_sale);
-
-    if (available < amount) {
-      throw new Error('Insufficient available credits to transfer');
-    }
-
-    // 3️⃣ Deduct from sender
-    sender.credit_balance =
-      (parseFloat(sender.credit_balance) - amount).toFixed(2);
-    await sender.save({ transaction: t });
-
-    // 4️⃣ Receiver holdings
-    let receiver = await Holdings.findOne({
-      where: { org_id: to_org_id, project_id },
-      transaction: t,
-      lock: t.LOCK.UPDATE,
-    });
-
-    if (!receiver) {
-      receiver = await Holdings.create(
-        {
-          org_id: to_org_id,
-          project_id,
-          credit_balance: amount,
-        },
-        { transaction: t }
-      );
-    } else {
-      receiver.credit_balance =
-        (parseFloat(receiver.credit_balance) + amount).toFixed(2);
-      await receiver.save({ transaction: t });
-    }
-
-    // 5️⃣ Transaction record
-    await Transactions.create(
-      {
-        type: 'transfer',
-        from_org_id,
-        to_org_id,
-        project_id,
-        amount,
-      },
-      { transaction: t }
-    );
-
-    await t.commit();
-
-    return {
-      transferred: amount,
-      to_org_code,
-    };
-
-  } catch (err) {
-    await t.rollback();
-    throw err;
-  }
 };
 
 const retireCreditsService = async (

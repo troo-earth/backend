@@ -4,7 +4,7 @@ const IcrProject = require('../marketplace/models/icrProjects');
 const Org = require('../org/orgModel');
 const Holdings = require('../holdings/holdingsModel');
 const { withLogging } = require('../../utils/logger');
-const sequelize  = require('../../config/database');
+const sequelize = require('../../config/database');
 const { createListingEvent } = require('../listingEvents/listingEventsService');
 
 
@@ -173,6 +173,7 @@ async function editListingService({
   new_quantity
 }) {
   if (!listing_id) throw new Error('Missing listing_id');
+  if (!org_id) throw new Error('Missing org_id');
 
   const t = await sequelize.transaction();
 
@@ -191,10 +192,10 @@ async function editListingService({
     if (listing.seller_id !== org_id)
       throw new Error('Unauthorized listing edit');
 
-    // Validate inputs
     const updates = {};
     const eventData = {};
 
+    /* ---------- PRICE UPDATE ---------- */
     if (new_price !== undefined) {
       const price = parseFloat(new_price);
       if (isNaN(price) || price <= 0)
@@ -202,16 +203,18 @@ async function editListingService({
 
       if (price !== parseFloat(listing.price_per_credit)) {
         updates.price_per_credit = price;
-        eventData.price_per_credit = price;
+        eventData.new_price_per_credit = price;
       }
     }
 
+    /* ---------- QUANTITY UPDATE ---------- */
     if (new_quantity !== undefined) {
       const qty = parseFloat(new_quantity);
       if (isNaN(qty) || qty <= 0)
         throw new Error('Invalid quantity');
 
-      const delta = qty - parseFloat(listing.credits_available);
+      const currentQty = parseFloat(listing.credits_available);
+      const delta = qty - currentQty;
 
       if (delta !== 0) {
         const holding = await Holdings.findOne({
@@ -225,24 +228,30 @@ async function editListingService({
 
         if (!holding) throw new Error('Holdings not found');
 
-        const available =
-          parseFloat(holding.credit_balance) -
-          parseFloat(holding.locked_for_sale);
+        const locked = parseFloat(holding.locked_for_sale);
+        const balance = parseFloat(holding.credit_balance);
+        const available = balance - locked;
 
-        if (delta > 0 && available < delta)
+        // Increasing listing quantity
+        if (delta > 0 && available < delta) {
           throw new Error('Insufficient credits to increase listing');
+        }
 
-        // Adjust holdings
-        holding.locked_for_sale =
-          parseFloat(holding.locked_for_sale) + delta;
+        // Prevent reducing below already sold credits
+        if (delta < 0 && Math.abs(delta) > currentQty) {
+          throw new Error('Cannot reduce listing below already sold amount');
+        }
 
-        if (holding.locked_for_sale < 0)
+        const newLocked = locked + delta;
+        if (newLocked < 0) {
           throw new Error('Invalid locked_for_sale state');
+        }
 
+        holding.locked_for_sale = newLocked;
         await holding.save({ transaction: t });
 
         updates.credits_available = qty;
-        eventData.quantity_change = delta;
+        eventData.quantity_delta = delta;
         eventData.new_credits_available = qty;
       }
     }
@@ -252,13 +261,15 @@ async function editListingService({
 
     await listing.update(updates, { transaction: t });
 
-    // Resolve org_code
+    /* ---------- ORG RESOLUTION ---------- */
     const org = await Org.findByPk(org_id, {
       attributes: ['org_code'],
       transaction: t
     });
 
-    // Emit UPDATED event
+    if (!org) throw new Error('Org not found');
+
+    /* ---------- EVENT ---------- */
     await createListingEvent({
       listing_id: listing.listing_id,
       event_type: 'UPDATED',

@@ -10,10 +10,12 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 async function buyCreditsController(req, res, next) {
   try {
-    const { listing_id, buyer_org_id, amount } = req.body || {};
+    const { listing_id, amount } = req.body || {};
+    
+    const buyer_org_id = req.session.user?.org_id;
 
     // Basic HTTP-level validation
-    if (!listing_id || !buyer_org_id || !amount) {
+    if (!listing_id || !amount) {
       return res.error('Missing required fields', 400);
     }
 

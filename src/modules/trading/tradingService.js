@@ -107,6 +107,26 @@ const buyCreditsService = async (
         { transaction }
     );
 
+    // Listing Event (PARTIALLY_FILLED or FILLED)
+    const remainingCredits = parseFloat(listing.credits_available);
+    
+    const buyerOrg = await Org.findByPk(buyer_org_id, {
+        attributes: ['org_code'],
+        transaction,
+    });
+
+    await createListingEvent({
+        listing_id: listing.listing_id,
+        event_type: remainingCredits === 0 ? 'FILLED' : 'PARTIALLY_FILLED',
+        actor_org_code: buyerOrg.org_code, // resolve this before calling service
+        event_data: {
+            bought_quantity: amount,
+            remaining_quantity: remainingCredits,
+            price_per_credit: listing.price_per_credit,
+        },
+        transaction,
+    });
+
     return {};
 };
 

@@ -42,6 +42,21 @@ const getAllListingsService = async () => {
     }
 };
 
+const getAllActiveListingsService = async () => {
+  return await Listing.findAll({
+    where: { status: 'open' },
+    order: [['createdAt', 'DESC']],
+  });
+};
+
+const getAllClosedListingsService = async () => {
+  return await Listing.findAll({
+    where: { status: 'closed' },
+    order: [['updatedAt', 'DESC']],
+  });
+};
+
+
 const getOrgListingsService = async (org_id) => {
   if (!org_id) {
     return {
@@ -56,6 +71,30 @@ const getOrgListingsService = async (org_id) => {
   });
 
   return { data: listings };
+};
+
+const getOrgActiveListingsService = async (org_id) => {
+  if (!org_id) throw new Error('Org not found in session');
+
+  return await Listing.findAll({
+    where: {
+      seller_id: org_id,
+      status: 'open',
+    },
+    order: [['createdAt', 'DESC']],
+  });
+};
+
+const getOrgClosedListingsService = async (org_id) => {
+  if (!org_id) throw new Error('Org not found in session');
+
+  return await Listing.findAll({
+    where: {
+      seller_id: org_id,
+      status: 'closed',
+    },
+    order: [['updatedAt', 'DESC']],
+  });
 };
 
 async function getListingByIdService(listing_id) {
@@ -109,4 +148,8 @@ module.exports = {
     getAllListingsService: withLogging(getAllListingsService, 'getAllListingsService'),
     getOrgListingsService: withLogging(getOrgListingsService, 'getOrgListingsService'),
     getListingByIdService: withLogging(getListingByIdService, 'getListingByIdService'),
+    getAllActiveListingsService: withLogging(getAllActiveListingsService, 'getAllActiveListingsService'),
+    getAllClosedListingsService: withLogging(getAllClosedListingsService, 'getAllClosedListingsService'),
+    getOrgActiveListingsService: withLogging(getOrgActiveListingsService, 'getOrgActiveListingsService'),
+    getOrgClosedListingsService: withLogging(getOrgClosedListingsService, 'getOrgClosedListingsService'),
 };

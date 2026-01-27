@@ -1,4 +1,12 @@
-const { createListingService, getAllListingsService, getOrgListingsService, getListingByIdService } = require('./listingService');
+const { createListingService,
+  getAllListingsService,
+  getOrgListingsService,
+  getListingByIdService,
+  getAllActiveListingsService,
+  getAllClosedListingsService,
+  getOrgActiveListingsService,
+  getOrgClosedListingsService
+} = require('./listingService');
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
 
@@ -63,6 +71,24 @@ const getAllListingsController = async (req, res) => {
   }
 };
 
+const getAllActiveListingsController = async (req, res, next) => {
+  try {
+    const listings = await getAllActiveListingsService();
+    return res.success('Active listings fetched', listings);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getAllClosedListingsController = async (req, res, next) => {
+  try {
+    const listings = await getAllClosedListingsService();
+    return res.success('Closed listings fetched', listings);
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getOrgListingsController = async (req, res, next) => {
   try {
     const org_id = req.session?.user?.org_id;
@@ -91,6 +117,31 @@ const getOrgListingsController = async (req, res, next) => {
     next(error);
   }
 };
+
+const getOrgActiveListingsController = async (req, res, next) => {
+  try {
+    const org_id = req.session.user?.org_id;
+    if (!org_id) return res.error('User not linked to org', 403);
+
+    const listings = await getOrgActiveListingsService(org_id);
+    return res.success('Active org listings fetched', listings);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getOrgClosedListingsController = async (req, res, next) => {
+  try {
+    const org_id = req.session.user?.org_id;
+    if (!org_id) return res.error('User not linked to org', 403);
+
+    const listings = await getOrgClosedListingsService(org_id);
+    return res.success('Closed org listings fetched', listings);
+  } catch (err) {
+    next(err);
+  }
+};
+
 
 async function getListingByIdController(req, res, next) {
   try {
@@ -125,4 +176,8 @@ module.exports = {
   getAllListingsController: withLogging(getAllListingsController, 'getAllListingsController'),
   getOrgListingsController: withLogging(getOrgListingsController, 'getOrgListingsController'),
   getListingByIdController: withLogging(getListingByIdController, 'getListingByIdController'),
+  getAllActiveListingsController: withLogging(getAllActiveListingsController, 'getAllActiveListingsController'),
+  getAllClosedListingsController: withLogging(getAllClosedListingsController, 'getAllClosedListingsController'),
+  getOrgActiveListingsController: withLogging(getOrgActiveListingsController, 'getOrgActiveListingsController'),
+  getOrgClosedListingsController: withLogging(getOrgClosedListingsController, 'getOrgClosedListingsController'),
 };

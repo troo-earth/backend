@@ -4,7 +4,11 @@ const {
     createListingController,
     getAllListingsController,
     getOrgListingsController,
-    getListingByIdController
+    getListingByIdController,
+    getAllActiveListingsController,
+    getAllClosedListingsController,
+    getOrgActiveListingsController,
+    getOrgClosedListingsController
 } = require('./listingController');
 
 const router = express.Router();
@@ -20,5 +24,17 @@ router.get('/get-org-listings', getOrgListingsController);
 
 // GET: Fetch a specific listing by ID
 router.get('/get-listing/:listing_id', getListingByIdController);
+
+// GET: Fetch all active listings
+router.get('/get-all-active-listings', getAllActiveListingsController); 
+
+// GET: Fetch all closed listings
+router.get('/get-all-closed-listings', getAllClosedListingsController);
+
+// GET: Fetch active listings for the organization associated with the logged-in user
+router.get('/get-org-active-listings', getOrgActiveListingsController);
+
+// GET: Fetch closed listings for the organization associated with the logged-in user
+router.get('/get-org-closed-listings', getOrgClosedListingsController);
 
 module.exports = router;

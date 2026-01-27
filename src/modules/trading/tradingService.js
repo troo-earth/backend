@@ -109,7 +109,7 @@ const buyCreditsService = async (
 
     // Listing Event (PARTIALLY_FILLED or FILLED)
     const remainingCredits = parseFloat(listing.credits_available);
-    
+
     const buyerOrg = await Org.findByPk(buyer_org_id, {
         attributes: ['org_code'],
         transaction,
@@ -127,6 +127,18 @@ const buyCreditsService = async (
         transaction,
     });
 
+    // Emit CLOSED event if listing is now fully closed
+    if (parseFloat(listing.credits_available) === 0) {
+        await createListingEvent({
+            listing_id: listing.listing_id,
+            event_type: 'CLOSED',
+            actor_org_code: null, // system action
+            event_data: {
+                reason: 'fully_filled',
+            },
+            transaction,
+        });
+    }
     return {};
 };
 

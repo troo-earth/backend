@@ -6,7 +6,9 @@ const {
   getAllActiveListingsService,
   getAllClosedListingsService,
   getOrgActiveListingsService,
-  getOrgClosedListingsService
+  getOrgClosedListingsService,
+  editListingService,
+  cancelListingService
 } = require('./listingService');
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
@@ -172,6 +174,87 @@ async function getListingByIdController(req, res, next) {
   }
 }
 
+async function editListingController(req, res, next) {
+  try {
+
+    if (!req.body?.listing_id || !req.body?.price || !req.body?.quantity) {
+      return res.error("listing_id, price and quantity are required", 400);
+    }
+
+    const { listing_id, price, quantity } = req.body;
+    const org_id = req.session.user?.org_id;
+
+    if (!org_id)
+      return res.error('User is not associated with an organization', 403);
+
+    if (!listing_id || !uuidValidate(listing_id))
+      return res.error('Invalid listing_id', 400);
+
+    const result = await editListingService({
+      listing_id,
+      org_id,
+      new_price: price,
+      new_quantity: quantity
+    });
+
+    return res.success(
+      'Listing updated successfully',
+      result
+    );
+
+  } catch (error) {
+    const statusMap = {
+      'Missing listing_id': 400,
+      'Invalid listing_id': 400,
+      'Invalid price': 400,
+      'Invalid quantity': 400,
+      'No valid changes provided': 400,
+      'Listing not found': 404,
+      'Listing is not editable': 400,
+      'Unauthorized listing edit': 403,
+      'Registry listings cannot be edited by User': 403,
+      'Insufficient credits to increase listing': 400,
+      'Holdings not found': 404,
+    };
+
+    const status = statusMap[error.message];
+    if (status) return res.error(error.message, status);
+
+    next(error);
+  }
+}
+
+async function cancelListingController(req, res, next) {
+  try {
+    const { listing_id } = req.body;
+    const org_id = req.session.user?.org_id;
+
+    if (!org_id)
+      return res.error('User not associated with organization', 403);
+
+    if (!listing_id || !uuidValidate(listing_id))
+      return res.error('Invalid listing_id', 400);
+
+    const result = await cancelListingService(listing_id, org_id);
+
+    return res.success('Listing cancelled successfully', result);
+
+  } catch (error) {
+    const statusMap = {
+      'Listing not found': 404,
+      'Listing is not open': 400,
+      'Registry listings cannot be cancelled': 403,
+      'Unauthorized': 403,
+      'Holdings not found': 404,
+    };
+
+    const status = statusMap[error.message];
+    if (status) return res.error(error.message, status);
+
+    next(error);
+  }
+}
+
 module.exports = {
   createListingController: withLogging(createListingController, 'createListingController'),
   getAllListingsController: withLogging(getAllListingsController, 'getAllListingsController'),
@@ -181,4 +264,6 @@ module.exports = {
   getAllClosedListingsController: withLogging(getAllClosedListingsController, 'getAllClosedListingsController'),
   getOrgActiveListingsController: withLogging(getOrgActiveListingsController, 'getOrgActiveListingsController'),
   getOrgClosedListingsController: withLogging(getOrgClosedListingsController, 'getOrgClosedListingsController'),
+  editListingController: withLogging(editListingController, 'editListingController'),
+  cancelListingController: withLogging(cancelListingController, 'cancelListingController'),
 };

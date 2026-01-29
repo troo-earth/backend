@@ -12,6 +12,7 @@ const tradingRoutes = require('./modules/trading/tradingRoutes');
 const uploadRoutes = require('./modules/uploads/uploadRoutes');
 const transactionsRoutes = require('./modules/transactions/transactionsRoutes');
 const retirementRoutes = require('./modules/retirements/retirementRoutes');
+const listingEventsRoutes = require('./modules/listingEvents/listingEventsRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
@@ -102,6 +103,7 @@ app.use('/api/v1/uploads', uploadRoutes);
 app.use('/api/v1/trading', tradingRoutes);
 app.use('/api/v1/transactions', transactionsRoutes);
 app.use('/api/v1/retirements', retirementRoutes);
+app.use('/api/v1/listing-events', listingEventsRoutes);
 
 app.use(errorHandler);
 

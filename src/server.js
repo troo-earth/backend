@@ -11,7 +11,7 @@ const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
 const tradingRoutes = require('./modules/trading/tradingRoutes');
 const uploadRoutes = require('./modules/uploads/uploadRoutes');
 const transactionsRoutes = require('./modules/transactions/transactionsRoutes');
-const retirementRoutes = require('./modules/reitrements/retirementRoutes');
+const retirementRoutes = require('./modules/retirements/retirementRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
@@ -88,9 +88,9 @@ app.use((req, res, next) => {
 });
 
 app.use('/', healthRouter);
+
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/trading', tradingRoutes);
 
 app.use(authMiddelware);
 

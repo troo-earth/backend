@@ -100,8 +100,8 @@ app.use('/api/v1/orgs/public', invitePublicRoutes);
 app.use(authMiddelware);
 
 // Protected invite routes (require authentication)
-// Mount explicitly with auth middleware to make protection obvious and robust.
-app.use('/api/v1/orgs', authMiddelware, inviteProtectedRoutes);
+// Mounted after global auth middleware so these routes remain protected without redundant checks.
+app.use('/api/v1/orgs', inviteProtectedRoutes);
 
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);

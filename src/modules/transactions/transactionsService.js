@@ -4,10 +4,9 @@ const IcrProject = require('../marketplace/models/icrProjects');
 const { withLogging } = require('../../utils/logger');
 const { Op } = require('sequelize');
 
+// This is a QUICK FIX NOTE:
+// UUIDs remain internal. API exposes org_code, project_name, thumbnail only.
 
-//This is a QUICK FIX to get transaction data without exposing UUIDs.
-//The DB must be migrated to remove org_id and project_id from the Transactions table 
-//Use Org_Code and Project_Name instead for readability at the API level.
 const viewTransactionsService = async (org_id) => {
   if (!org_id) {
     return { error: 'org_id missing from session', statusCode: 401 };
@@ -49,24 +48,27 @@ const viewTransactionsService = async (org_id) => {
     orgCodeMap[o.org_id] = o.org_code;
   });
 
-  // 4. Fetch project name map
+  // 4. Fetch project name + thumbnail map
   const projects = await IcrProject.findAll({
     where: { id: [...projectIds] },
-    attributes: ['id', 'fullName'],
+    attributes: ['id', 'fullName', 'thumbnail'],
   });
 
-  const projectNameMap = {};
+  const projectMap = {};
   projects.forEach(p => {
-    projectNameMap[p.id] = p.fullName;
+    projectMap[p.id] = {
+      name: p.fullName,
+      thumbnail: p.thumbnail,
+    };
   });
 
-  // 5. Shape response (NO UUIDs exposed)
   const formattedTransactions = transactions.map(tx => ({
     tx_id: tx.tx_id,
     type: tx.type,
     amount: tx.amount,
     created_at: tx.createdAt,
 
+    // org identifiers (human-readable)
     from_org_code: tx.from_org_id
       ? orgCodeMap[tx.from_org_id] || null
       : null,
@@ -75,10 +77,17 @@ const viewTransactionsService = async (org_id) => {
       ? orgCodeMap[tx.to_org_id] || null
       : null,
 
+    // project identifiers & metadata
+    project_id: tx.project_id, // <-- explicitly included
     project_name: tx.project_id
-      ? projectNameMap[tx.project_id] || null
+      ? projectMap[tx.project_id]?.name || null
+      : null,
+
+    project_thumbnail: tx.project_id
+      ? projectMap[tx.project_id]?.thumbnail || null
       : null,
   }));
+
 
   return {
     data: formattedTransactions,

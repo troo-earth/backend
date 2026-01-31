@@ -2,6 +2,7 @@ const { withLogging } = require('../../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const User = require('../user/userModel');
 const Org = require('./orgModel');
+const supabase = require('../../config/supabase');
 
 function generateOrgCode(org_name, org_id) {
   const prefix = org_name
@@ -52,6 +53,25 @@ async function createOrgService(payload, sessionUser) {
     { org_id: org.org_id },
     { where: { user_id: sessionUser.user_id } }
   );
+
+  // 3️⃣ Assign ADMIN role to creator (if Roles table has ADMIN)
+  try {
+    const { data: roles, error } = await supabase
+      .from('Roles')
+      .select('*')
+      .eq('role_name', 'ADMIN')
+      .limit(1);
+
+    if (!error && roles && roles.length > 0) {
+      const adminRole = roles[0];
+      await User.update(
+        { role_id: adminRole.role_id, role_name: adminRole.role_name },
+        { where: { user_id: sessionUser.user_id } }
+      );
+    }
+  } catch (err) {
+    console.error('Failed to auto-assign ADMIN role to org creator', err.message || err);
+  }
 
   return org;
 }

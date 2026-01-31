@@ -10,7 +10,7 @@ const emailApi = new SibApiV3Sdk.TransactionalEmailsApi();
  * Core Email Sender Service
  * Used across the notifications/email module
  */
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, text }) {
   try {
     const sendData = {
       sender: {
@@ -20,6 +20,7 @@ async function sendEmail({ to, subject, html }) {
       to: [{ email: to }],
       subject,
       htmlContent: html,
+      textContent: text,
       replyTo: {
         email: 'support@troo.earth',
         name: 'troo.earth Support'

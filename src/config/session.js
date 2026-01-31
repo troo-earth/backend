@@ -8,13 +8,16 @@ const allowCrossSiteDev = process.env.ALLOW_CROSS_SITE_DEV === 'true';
 const sameSite = allowCrossSiteDev ? 'none' : 'lax';
 const secure = isProd && allowCrossSiteDev;
 
+// create a RedisStore instance so other modules (sessionManager) can access it
+const store = new RedisStore({
+  client: redisClient,
+  prefix: 'session:',
+});
+
 const sessionMiddleware = session({
   name: 'troo.sid',
 
-  store: new RedisStore({
-    client: redisClient,
-    prefix: 'session:',
-  }),
+  store,
 
   secret: process.env.SESSION_SECRET,
 
@@ -25,9 +28,10 @@ const sessionMiddleware = session({
     httpOnly: true,
     secure: secure,
     sameSite: sameSite,
-    maxAge: 1000 * 60 * 60 * 24
-  }
-  ,
+    maxAge: 1000 * 60 * 60 * 24,
+  },
 });
 
+// preserve existing default export (the middleware) but also expose the store
 module.exports = sessionMiddleware;
+module.exports.store = store;

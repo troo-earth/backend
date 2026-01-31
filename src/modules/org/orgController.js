@@ -4,6 +4,7 @@ const {
   updateOrgService,
 } = require('./orgService');
 const { withLogging } = require('../../utils/logger');
+const User = require('../user/userModel');
 
 async function createOrgController(req, res, next) {
   try {
@@ -15,6 +16,21 @@ async function createOrgController(req, res, next) {
 
     // ✅ update session immediately
     req.session.user.org_id = org.org_id;
+
+    // Refresh role fields from DB (so creator immediately has ADMIN in-session)
+    try {
+      const dbUser = await User.findByPk(req.session.user.user_id);
+      if (dbUser) {
+        req.session.user.role_id = dbUser.role_id || null;
+        req.session.user.role_name = dbUser.role_name || null;
+        // persist session change
+        req.session.save((err) => {
+          if (err) console.error('Failed to save session after role assignment', err);
+        });
+      }
+    } catch (e) {
+      console.error('Failed to refresh session role after org creation', e.message || e);
+    }
 
     return res.success(
       'Organization created successfully',

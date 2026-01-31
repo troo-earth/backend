@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { getAllProjects, getProjectById, syncIcrProjects } = require('./marketplaceController');
+const { requirePermission } = require('../../middleware/rbacMiddleware');
 
 // Import your errorHandler or auth middleware if needed
 // const errorHandler = require('../../middleware/errorHandler');
@@ -13,7 +14,7 @@ router.get('/projects', getAllProjects);
 router.get('/projects/:id', getProjectById);
 
 // Admin sync route (add auth middleware later)
-router.post('/admin-sync', syncIcrProjects);
+router.post('/admin-sync', requirePermission('USER_MANAGEMENT'), syncIcrProjects);
 
 // GET /api/marketplace/projects/:id (single project)
 router.get('/projects/:id', getProjectById);

@@ -5,6 +5,7 @@ const sequelize = require('./config/database');
 const userRoutes = require('./modules/user/userRoutes');
 const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
+const { publicRouter: invitePublicRoutes, protectedRouter: inviteProtectedRoutes } = require('./modules/invitations/inviteRoutes');
 const authRoutes = require('./modules/auth/authRoutes');
 const listingRoutes = require('./modules/listing/listingRoutes');
 const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
@@ -92,7 +93,14 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/trading', tradingRoutes);
 
+// Public org routes (invite join) - mounted before auth middleware so invitees can accept without a session
+app.use('/api/v1/orgs/public', invitePublicRoutes);
+
 app.use(authMiddelware);
+
+// Protected invite routes (require authentication)
+// Mount explicitly with auth middleware to make protection obvious and robust.
+app.use('/api/v1/orgs', authMiddelware, inviteProtectedRoutes);
 
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);

@@ -1,6 +1,8 @@
-const { createUserService, updateUserService, viewUserService } = require('./userService');
+const { createUserService, updateUserService, viewUserService, deleteUserService } = require('./userService');
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
+const User = require('./userModel');
+const sessionManager = require('../../utils/sessionManager');
 
 async function createUserController(req, res, next) {
   try {
@@ -26,7 +28,8 @@ async function createUserController(req, res, next) {
         user_id: user.user_id,
         fullname: user.fullname,
         email: user.email,
-        role: user.role,        
+        role_id: user.role_id,
+        role_name: user.role_name,
         org_id: user.org_id
       };
 
@@ -138,8 +141,50 @@ async function viewUserController(req, res, next) {
   }
 }
 
+// Delete own account. If user is an ADMIN and the only admin in their org, disallow deletion
+async function deleteAccountController(req, res, next) {
+  try {
+    const actor = req.session?.user;
+    if (!actor) return res.status(401).json({ success: false, message: 'Unauthenticated' });
+
+    const userId = actor.user_id;
+    // Invalidate sessions for user across devices
+    try {
+      await sessionManager.invalidateSessionsForUser(userId);
+    } catch (e) {
+      console.error('Failed to invalidate sessions for user deletion', e && e.message ? e.message : e);
+    }
+
+    // Delegate deletion and sole-admin guard to service
+    try {
+      await deleteUserService(userId);
+    } catch (err) {
+      if (err && (err.code === 'SOLE_ADMIN' || err.message === 'Sole admin')) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete account: you are the only ADMIN in the organization. Invite another ADMIN or assign the ADMIN role to another user before deleting your account.'
+        });
+      }
+      throw err;
+    }
+
+    // Destroy current session if present
+    if (req.session) {
+      req.session.destroy((err) => {
+        // ignore destroy errors, still return success
+        return res.status(200).json({ success: true, message: 'Account deleted successfully' });
+      });
+    } else {
+      return res.status(200).json({ success: true, message: 'Account deleted successfully' });
+    }
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   createUserController: withLogging(createUserController, 'createUserController'),
   updateUserController: withLogging(updateUserController, 'updateUserController'),
   viewUserController: withLogging(viewUserController, 'viewUserController'),
+  deleteAccountController: withLogging(deleteAccountController, 'deleteAccountController'),
 };

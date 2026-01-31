@@ -179,8 +179,31 @@ async function viewUserService(user_id) {
   return user;
 }
 
+async function deleteUserService(user_id) {
+  if (!user_id) throw new Error('Missing user ID');
+
+  const user = await User.findByPk(user_id);
+  if (!user) throw new Error('User not found');
+
+  // If user is ADMIN and belongs to an org, ensure there is at least one other ADMIN
+  if (user.role_name === 'ADMIN' && user.org_id) {
+    const adminCount = await User.count({ where: { org_id: user.org_id, role_name: 'ADMIN' } });
+    if (adminCount <= 1) {
+      const err = new Error('Sole admin');
+      err.code = 'SOLE_ADMIN';
+      throw err;
+    }
+  }
+
+  // Permanently delete user
+  await User.destroy({ where: { user_id: user_id } });
+
+  return true;
+}
+
 module.exports = {
   createUserService: withLogging(createUserService, 'createUserService'),
   updateUserService: withLogging(updateUserService, 'updateUserService'),
   viewUserService: withLogging(viewUserService, 'viewUserService'),
+  deleteUserService: withLogging(deleteUserService, 'deleteUserService'),
 };

@@ -6,6 +6,7 @@ const { Op } = require('sequelize');
 const sequelize = require('../../config/database');
 const { sendEmail } = require('../emails/emailService');
 const { accountCreatedTemplate, accountUpdatedTemplate } = require('../emails/emailTemplates');
+const { validate: isValidUUID } = require('uuid');
 
 async function createUserService({ user_name, email, password, fullname }) {
   // Validate and sanitize inputs

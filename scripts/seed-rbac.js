@@ -2,9 +2,9 @@ const supabase = require('../src/config/supabase');
 
 async function upsert(table, row, uniqueCols) {
   // Try to find an existing row by uniqueCols
-  const query = supabase.from(table).select('*');
+  let query = supabase.from(table).select('*');
   for (const col of uniqueCols) {
-    query.eq(col, row[col]);
+    query = query.eq(col, row[col]);
   }
   const { data } = await query.limit(1).maybeSingle();
   if (data) return data;

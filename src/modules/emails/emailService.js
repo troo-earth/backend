@@ -20,7 +20,7 @@ async function sendEmail({ to, subject, html, text }) {
       to: [{ email: to }],
       subject,
       htmlContent: html,
-      textContent: text,
+      textContent: text || '',
       replyTo: {
         email: 'support@troo.earth',
         name: 'troo.earth Support'

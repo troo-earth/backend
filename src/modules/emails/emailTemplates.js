@@ -53,8 +53,6 @@ function accountUpdatedTemplate({ user_name }) {
   return emailLayout(content);
 }
 
-module.exports = { accountCreatedTemplate, accountUpdatedTemplate };
-
 // Invitation email template
 function inviteTemplate({ role_name, joinUrl, inviteId, org_id, expires_at }) {
   const content = `

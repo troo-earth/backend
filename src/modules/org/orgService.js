@@ -1,4 +1,5 @@
 const { withLogging } = require('../../utils/logger');
+const { invalidatePermissionsCache } = require('../../middleware/rbacMiddleware');
 const { v4: uuidv4 } = require('uuid');
 const User = require('../user/userModel');
 const Org = require('./orgModel');
@@ -68,6 +69,9 @@ async function createOrgService(payload, sessionUser) {
         { role_id: adminRole.role_id, role_name: adminRole.role_name },
         { where: { user_id: sessionUser.user_id } }
       );
+      
+      // Invalidate permissions cache for the ADMIN role
+      invalidatePermissionsCache(adminRole.role_id);
     }
   } catch (err) {
     console.error('Failed to auto-assign ADMIN role to org creator', err.message || err);

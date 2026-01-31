@@ -1,6 +1,7 @@
 const { createInvitation, verifyAndConsumeInvitation } = require('../invitations/inviteService');
 const { revokeInvitation } = require('../invitations/inviteService');
 const { createUserService } = require('../user/userService');
+const { invalidatePermissionsCache } = require('../../middleware/rbacMiddleware');
 const User = require('../user/userModel');
 const supabase = require('../../config/supabase');
 const sessionManager = require('../../utils/sessionManager');
@@ -45,16 +46,26 @@ async function joinOrganizationController(req, res, next) {
     const { invite_id, org_id, user_name, email, password, fullname } = req.body || {};
     if (!invite_id) return res.error('Missing invite_id', 400);
 
-    // verify invitation first
+    // verify invitation first - org_id is used for validation but we'll use invite.org_id for updates
     const invite = await verifyAndConsumeInvitation({ invite_id, org_id, email });
+    
+    // SECURITY: Use the verified org_id from the invitation, not from request body
+    const verifiedOrgId = invite.org_id;
 
     // If user already exists, associate org and role
     const inviteEmail = (invite && invite.email) ? invite.email.toLowerCase() : null;
     const lookupEmail = (email || inviteEmail);
     const existing = lookupEmail ? await User.findOne({ where: { email: lookupEmail.toLowerCase() } }) : null;
     if (existing) {
-      // update org and role
-        await User.update({ org_id, role_id: invite.role_id, role_name: (invite.role_name || null) }, { where: { user_id: existing.user_id } });
+      // update org and role using VERIFIED org_id from invitation
+        await User.update({ 
+          org_id: verifiedOrgId, 
+          role_id: invite.role_id, 
+          role_name: (invite.role_name || null) 
+        }, { where: { user_id: existing.user_id } });
+
+        // Invalidate permissions cache for the assigned role
+        invalidatePermissionsCache(invite.role_id);
 
         // Invalidate any existing sessions for this user so their session reflects new org/role
         try {
@@ -72,8 +83,15 @@ async function joinOrganizationController(req, res, next) {
   if (!createEmail) return res.error('Missing email for new user', 400);
   const newUser = await createUserService({ user_name, email: createEmail, password, fullname });
 
-    // Attach org and role to created user
-    await User.update({ org_id, role_id: invite.role_id, role_name: (invite.role_name || null) }, { where: { user_id: newUser.user_id } });
+    // Attach org and role to created user using VERIFIED org_id from invitation
+    await User.update({ 
+      org_id: verifiedOrgId, 
+      role_id: invite.role_id, 
+      role_name: (invite.role_name || null) 
+    }, { where: { user_id: newUser.user_id } });
+
+    // Invalidate permissions cache for the assigned role
+    invalidatePermissionsCache(invite.role_id);
 
     return res.success('Account created and associated with organization', { user_id: newUser.user_id });
   } catch (err) {
@@ -218,6 +236,10 @@ async function revokePermissionsController(req, res, next) {
     const newRole = roles[0];
 
     await User.update({ role_id: newRole.role_id, role_name: newRole.role_name }, { where: { user_id: targetUserId } });
+
+    // Invalidate permissions cache for the old and new roles
+    // Note: We invalidate for both old and new role_ids to be safe
+    invalidatePermissionsCache(newRole.role_id);
 
     // Invalidate any active sessions for the target user so their new role is applied on next login
     try {

@@ -87,14 +87,18 @@ async function verifyAndConsumeInvitation({ invite_id, org_id, email }) {
     throw new Error('Invitation email mismatch');
   }
 
-  // Mark invitation as accepted
+  // Mark invitation as accepted - CRITICAL: must succeed to prevent reuse
   const { error: updateErr } = await supabase
     .from('Invitations')
-    .update({ status: 'ACCEPTED', updatedAt: new Date().toISOString() })
+    .update({ 
+      status: 'ACCEPTED', 
+      updated_at: new Date().toISOString() 
+    })
     .eq('invite_id', data.invite_id);
 
   if (updateErr) {
     console.error('Failed to update invitation status', updateErr);
+    throw new Error('Failed to mark invitation as accepted. Please try again.');
   }
 
   // Try to enrich with role_name
@@ -114,7 +118,12 @@ async function revokeInvitation({ invite_id, revoked_by }) {
 
   const { data, error } = await supabase
     .from('Invitations')
-    .update({ status: 'REVOKED', revoked_by, revoked_at: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .update({ 
+      status: 'REVOKED', 
+      revoked_by, 
+      revoked_at: new Date().toISOString(), 
+      updated_at: new Date().toISOString() 
+    })
     .eq('invite_id', invite_id)
     .select()
     .single();

@@ -3,6 +3,7 @@ const { withLogging } = require('../../utils/logger');
 const User = require('./userModel');
 const bcrypt = require('bcrypt');
 const { Op } = require('sequelize');
+const sequelize = require('../../config/database');
 const { sendEmail } = require('../emails/emailService');
 const { accountCreatedTemplate, accountUpdatedTemplate } = require('../emails/emailTemplates');
 
@@ -182,23 +183,46 @@ async function viewUserService(user_id) {
 async function deleteUserService(user_id) {
   if (!user_id) throw new Error('Missing user ID');
 
-  const user = await User.findByPk(user_id);
-  if (!user) throw new Error('User not found');
+  // Use a transaction to ensure atomicity and prevent race conditions
+  const result = await sequelize.transaction(async (t) => {
+    // Find the user with row-level locking to prevent concurrent modifications
+    const user = await User.findByPk(user_id, {
+      lock: t.LOCK.UPDATE, // Acquire exclusive lock on this user row
+      transaction: t
+    });
+    
+    if (!user) throw new Error('User not found');
 
-  // If user is ADMIN and belongs to an org, ensure there is at least one other ADMIN
-  if (user.role_name === 'ADMIN' && user.org_id) {
-    const adminCount = await User.count({ where: { org_id: user.org_id, role_name: 'ADMIN' } });
-    if (adminCount <= 1) {
-      const err = new Error('Sole admin');
-      err.code = 'SOLE_ADMIN';
-      throw err;
+    // If user is ADMIN and belongs to an org, ensure there is at least one other ADMIN
+    if (user.role_name === 'ADMIN' && user.org_id) {
+      // Count admins in the organization with shared lock to prevent concurrent admin deletions
+      // Use FOR SHARE lock to allow concurrent reads but prevent modifications
+      const adminCount = await User.count({ 
+        where: { 
+          org_id: user.org_id, 
+          role_name: 'ADMIN' 
+        },
+        lock: t.LOCK.SHARE, // Shared lock prevents concurrent admin role changes/deletions
+        transaction: t
+      });
+      
+      if (adminCount <= 1) {
+        const err = new Error('Cannot delete the sole admin of an organization. Please assign another admin first.');
+        err.code = 'SOLE_ADMIN';
+        throw err;
+      }
     }
-  }
 
-  // Permanently delete user
-  await User.destroy({ where: { user_id: user_id } });
+    // Permanently delete user (within the same transaction)
+    await User.destroy({ 
+      where: { user_id: user_id },
+      transaction: t 
+    });
 
-  return true;
+    return true;
+  });
+
+  return result;
 }
 
 module.exports = {

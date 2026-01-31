@@ -2,7 +2,6 @@ const { createUserService, updateUserService, viewUserService, deleteUserService
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
 const User = require('./userModel');
-const sessionManager = require('../../utils/sessionManager');
 
 async function createUserController(req, res, next) {
   try {

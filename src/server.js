@@ -12,7 +12,8 @@ const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
 const tradingRoutes = require('./modules/trading/tradingRoutes');
 const uploadRoutes = require('./modules/uploads/uploadRoutes');
 const transactionsRoutes = require('./modules/transactions/transactionsRoutes');
-const retirementRoutes = require('./modules/reitrements/retirementRoutes');
+const retirementRoutes = require('./modules/retirements/retirementRoutes');
+const listingEventsRoutes = require('./modules/listingEvents/listingEventsRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
@@ -89,9 +90,9 @@ app.use((req, res, next) => {
 });
 
 app.use('/', healthRouter);
+
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/trading', tradingRoutes);
 
 // Public org routes (invite join) - mounted before auth middleware so invitees can accept without a session
 app.use('/api/v1/orgs/public', invitePublicRoutes);
@@ -110,6 +111,7 @@ app.use('/api/v1/uploads', uploadRoutes);
 app.use('/api/v1/trading', tradingRoutes);
 app.use('/api/v1/transactions', transactionsRoutes);
 app.use('/api/v1/retirements', retirementRoutes);
+app.use('/api/v1/listing-events', listingEventsRoutes);
 
 app.use(errorHandler);
 

@@ -8,7 +8,9 @@ const {
     getAllActiveListingsController,
     getAllClosedListingsController,
     getOrgActiveListingsController,
-    getOrgClosedListingsController
+    getOrgClosedListingsController,
+    editListingController,
+    cancelListingController
 } = require('./listingController');
 
 const router = express.Router();
@@ -36,5 +38,11 @@ router.get('/get-org-active-listings', getOrgActiveListingsController);
 
 // GET: Fetch closed listings for the organization associated with the logged-in user
 router.get('/get-org-closed-listings', getOrgClosedListingsController);
+
+// PUT: Edit an existing listing
+router.put('/edit-listing', editListingController);
+
+// POST: Cancel a listing
+router.post('/cancel-listing', cancelListingController);
 
 module.exports = router;

@@ -5,8 +5,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "seed:rbac": "node scripts/seed-rbac.js",
-    "migrate": "npx sequelize-cli db:migrate"
+    "seed:rbac": "node scripts/seed-rbac.js"
   },
   "keywords": [],
   "author": "",

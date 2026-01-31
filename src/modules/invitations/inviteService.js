@@ -88,17 +88,21 @@ async function verifyAndConsumeInvitation({ invite_id, org_id, email }) {
   }
 
   // Mark invitation as accepted - CRITICAL: must succeed to prevent reuse
-  const { error: updateErr } = await supabase
+  const { data: updatedInvite, error: updateErr } = await supabase
     .from('Invitations')
     .update({ 
       status: 'ACCEPTED', 
       updated_at: new Date().toISOString() 
     })
-    .eq('invite_id', data.invite_id);
+    .eq('invite_id', data.invite_id)
+    .eq('status', 'PENDING')
+    .select()
+    .single();
 
-  if (updateErr) {
-    console.error('Failed to update invitation status', updateErr);
-    throw new Error('Failed to mark invitation as accepted. Please try again.');
+  // If no row was updated (or an error occurred), treat as invalid/expired/already-used
+  if (updateErr || !updatedInvite) {
+    console.error('Failed to update invitation status (possibly already used or invalid)', updateErr);
+    throw new Error('Invalid or expired invitation');
   }
 
   // Try to enrich with role_name

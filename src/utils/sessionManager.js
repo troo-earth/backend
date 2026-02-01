@@ -50,7 +50,15 @@ async function invalidateSessionsForUser(userId) {
     for (const sid of sessions) {
       try {
         // connect-redis expects the session id without prefix
-        await new Promise((resolve) => store.destroy(sid, (err) => resolve()));
+        await new Promise((resolve, reject) => {
+          store.destroy(sid, (err) => {
+            if (err) {
+              console.error('Error from session store while destroying session', sid, err.message || err);
+              return reject(err);
+            }
+            resolve();
+          });
+        });
       } catch (e) {
         console.error('Failed to destroy session', sid, e.message || e);
       }

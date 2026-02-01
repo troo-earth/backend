@@ -9,11 +9,12 @@ const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || '';
 // invitation's UUID (invite_id) as the identifier sent to the recipient.
 
 async function createInvitation({ email, org_id, invited_by_user_id, role_name }) {
+  const normalizedRoleName = typeof role_name === 'string' ? role_name.toUpperCase() : role_name;
   // lookup role_id by role_name
   const { data: roles, error: roleErr } = await supabase
     .from('Roles')
     .select('*')
-    .eq('role_name', role_name)
+    .eq('role_name', normalizedRoleName)
     .limit(1);
 
   if (roleErr) throw new Error('Failed to lookup role');

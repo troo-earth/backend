@@ -1,11 +1,9 @@
-const { createInvitation, verifyAndConsumeInvitation } = require('../invitations/inviteService');
-const { revokeInvitation } = require('../invitations/inviteService');
+const { createInvitation, verifyAndConsumeInvitation, revokeInvitation } = require('../invitations/inviteService');
 const { createUserService } = require('../user/userService');
 const { invalidatePermissionsCache } = require('../../middleware/rbacMiddleware');
 const User = require('../user/userModel');
 const supabase = require('../../config/supabase');
 const sessionManager = require('../../utils/sessionManager');
-
 async function inviteUserController(req, res, next) {
   try {
     const inviter = req.session?.user;

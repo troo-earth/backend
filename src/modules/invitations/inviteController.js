@@ -44,7 +44,7 @@ async function inviteUserController(req, res, next) {
 async function joinOrganizationController(req, res, next) {
   try {
     const { invite_id, org_id, user_name, email, password, fullname } = req.body || {};
-    if (!invite_id) return res.error('Missing invite_id', 400);
+    if (!invite_id || !email) return res.error('Missing invite_id or email', 400);
 
     // verify invitation first - org_id is used for validation but we'll use invite.org_id for updates
     const invite = await verifyAndConsumeInvitation({ invite_id, org_id, email });

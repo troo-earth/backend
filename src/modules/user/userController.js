@@ -148,14 +148,8 @@ async function deleteAccountController(req, res, next) {
     if (!actor) return res.status(401).json({ success: false, message: 'Unauthenticated' });
 
     const userId = actor.user_id;
-    // Invalidate sessions for user across devices
-    try {
-      await sessionManager.invalidateSessionsForUser(userId);
-    } catch (e) {
-      console.error('Failed to invalidate sessions for user deletion', e && e.message ? e.message : e);
-    }
 
-    // Delegate deletion and sole-admin guard to service
+    // Delegate deletion and sole-admin guard to service FIRST
     try {
       await deleteUserService(userId);
     } catch (err) {
@@ -166,6 +160,14 @@ async function deleteAccountController(req, res, next) {
         });
       }
       throw err;
+    }
+
+    // Only invalidate sessions AFTER successful deletion
+    try {
+      await sessionManager.invalidateSessionsForUser(userId);
+    } catch (e) {
+      console.error('Failed to invalidate sessions after user deletion', e && e.message ? e.message : e);
+      // Don't fail the request if session invalidation fails - account is already deleted
     }
 
     // Destroy current session if present

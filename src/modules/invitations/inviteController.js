@@ -132,7 +132,7 @@ async function revokeInviteController(req, res, next) {
   }
 }
 
-// List members of the actor's org (ADMIN/MANAGER/VIEWER can view)
+// List members of the actor's org (ADMIN can view)
 async function listMembersController(req, res, next) {
   try {
     const actor = req.session?.user;

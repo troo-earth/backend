@@ -1,7 +1,6 @@
 const { isValidEmail, isValidPassword } = require('../../utils/validation');
 const { withLogging } = require('../../utils/logger');
 const User = require('./userModel');
-const { Role } = require('../../models/associations');
 const bcrypt = require('bcrypt');
 const { Op } = require('sequelize');
 const sequelize = require('../../config/database');

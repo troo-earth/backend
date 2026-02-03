@@ -20,8 +20,8 @@ async function createUserController(req, res, next) {
     const { password_hash, ...safeUser } =
       user.toJSON ? user.toJSON() : user;
 
-    // Use role_name from session instead of querying database
-    const role_name = req.session?.user?.role_name || null;
+    // Derive role_name from the newly created user instead of copying from the existing session
+    const role_name = user.role_name || null;
 
     // 🔒 Rotate session + respond ONLY inside callback
     req.session.regenerate((err) => {

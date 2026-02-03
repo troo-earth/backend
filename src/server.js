@@ -7,7 +7,7 @@ require('./models/associations');
 const userRoutes = require('./modules/user/userRoutes');
 const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
-const inviteRoutes = require('./modules/invitations/inviteRoutes');
+const { publicInviteRoutes, authenticatedInviteRoutes } = require('./modules/invitations/inviteRoutes');
 const authRoutes = require('./modules/auth/authRoutes');
 const listingRoutes = require('./modules/listing/listingRoutes');
 const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
@@ -96,10 +96,13 @@ app.use('/', healthRouter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 
-app.use('/api/v1/orgs', inviteRoutes);
+// Mount public invite routes before authentication middleware
+app.use('/api/v1/orgs', publicInviteRoutes);
+
 app.use(authMiddelware);
 
-app.use('/api/v1/orgs', inviteRoutes);
+// Mount authenticated invite routes after authentication middleware
+app.use('/api/v1/orgs', authenticatedInviteRoutes);
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
 app.use('/api/v1/listings', listingRoutes);

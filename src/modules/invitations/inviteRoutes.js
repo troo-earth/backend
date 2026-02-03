@@ -9,15 +9,22 @@ const {
   revokePermissionsController,
 } = require('./inviteController');
 
-const router = express.Router();
+// Public router for unauthenticated endpoints
+const publicRouter = express.Router();
 
 // Public join endpoint - invitees can accept invite and create/associate account
-router.post('/join', joinOrganizationController);
+publicRouter.post('/join', joinOrganizationController);
 
-router.post('/invite', inviteUserController);
-router.post('/revoke-invite', revokeInviteController);
-router.post('/revoke-permissions', revokePermissionsController);
-router.get('/members', requirePermission('USER_MANAGEMENT'), listMembersController);
-router.delete('/members/:id', requirePermission('USER_MANAGEMENT'), removeMemberController);
+// Authenticated router for endpoints requiring authentication
+const authenticatedRouter = express.Router();
 
-module.exports = router;
+authenticatedRouter.post('/invite', inviteUserController);
+authenticatedRouter.post('/revoke-invite', revokeInviteController);
+authenticatedRouter.post('/revoke-permissions', revokePermissionsController);
+authenticatedRouter.get('/members', requirePermission('USER_MANAGEMENT'), listMembersController);
+authenticatedRouter.delete('/members/:id', requirePermission('USER_MANAGEMENT'), removeMemberController);
+
+module.exports = {
+  publicInviteRoutes: publicRouter,
+  authenticatedInviteRoutes: authenticatedRouter,
+};

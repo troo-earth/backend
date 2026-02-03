@@ -55,7 +55,7 @@ async function createInvitation({ email, org_id, invited_by_user_id, role_name }
   return { invitation: data };
 }
 
-async function verifyAndConsumeInvitation({ invite_id, org_id, email }) {
+async function verifyInvitation({ invite_id, org_id, email }) {
   // Look up by invite_id and pending status. If org_id is provided (from URL), validate it matches.
   if (!invite_id) throw new Error('Missing invite identifier');
 
@@ -89,26 +89,6 @@ async function verifyAndConsumeInvitation({ invite_id, org_id, email }) {
     throw new Error('Invitation email mismatch');
   }
 
-  // Mark invitation as accepted - CRITICAL: must succeed to prevent reuse
-  const [updatedRowsCount] = await Invitation.update(
-    { 
-      status: 'ACCEPTED',
-      updatedAt: new Date()
-    },
-    {
-      where: {
-        invite_id: data.invite_id,
-        status: 'PENDING'
-      }
-    }
-  );
-
-  // If no row was updated, treat as invalid/expired/already-used
-  if (updatedRowsCount === 0) {
-    console.error('Failed to update invitation status (possibly already used or invalid)');
-    throw new Error('Invalid or expired invitation');
-  }
-
   // Try to enrich with role_name
   let role_name = null;
   try {
@@ -123,6 +103,37 @@ async function verifyAndConsumeInvitation({ invite_id, org_id, email }) {
   }
 
   return { ...data, role_name }; // contains role_id and invited_by_user_id and role_name
+}
+
+async function consumeInvitation({ invite_id }) {
+  // Mark invitation as accepted - CRITICAL: must succeed to prevent reuse
+  const [updatedRowsCount] = await Invitation.update(
+    { 
+      status: 'ACCEPTED',
+      updatedAt: new Date()
+    },
+    {
+      where: {
+        invite_id: invite_id,
+        status: 'PENDING'
+      }
+    }
+  );
+
+  // If no row was updated, treat as invalid/expired/already-used
+  if (updatedRowsCount === 0) {
+    console.error('Failed to update invitation status (possibly already used or invalid)');
+    throw new Error('Invalid or expired invitation');
+  }
+
+  return true;
+}
+
+// Legacy function for backward compatibility - now calls the split functions
+async function verifyAndConsumeInvitation({ invite_id, org_id, email }) {
+  const invite = await verifyInvitation({ invite_id, org_id, email });
+  await consumeInvitation({ invite_id });
+  return invite;
 }
 
 async function revokeInvitation({ invite_id, revoked_by }) {
@@ -173,9 +184,7 @@ async function inviteUserService({ email, role_name, org_id, invited_by_user_id,
 
 // Business logic for joining an organization
 async function joinOrganizationService({ invite_id, org_id, user_name, email, password, fullname }) {
-  // Verify invitation first - org_id is used for validation but we'll use invite.org_id for updates
-  const invite = await verifyAndConsumeInvitation({ invite_id, org_id, email });
-
+  const invite = await verifyInvitation({ invite_id, org_id, email });
   // Try to find existing user by email
   const existing = await User.findOne({ where: { email: email.toLowerCase() } });
   
@@ -208,6 +217,8 @@ async function joinOrganizationService({ invite_id, org_id, user_name, email, pa
       // No longer storing role_name in Users table
     });
   }
+
+  await consumeInvitation({ invite_id });
 
   return { message: 'Successfully joined organization', user_id: user.user_id, role_name: invite.role_name };
 }
@@ -369,7 +380,9 @@ async function changeUserRoleService({ targetUserId, requestedRoleName, actor })
 
 module.exports = { 
   createInvitation, 
-  verifyAndConsumeInvitation, 
+  verifyInvitation,
+  consumeInvitation,
+  verifyAndConsumeInvitation, // Legacy function for backward compatibility
   revokeInvitation,
   inviteUserService,
   joinOrganizationService,

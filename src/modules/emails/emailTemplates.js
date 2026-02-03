@@ -71,7 +71,7 @@ function inviteTemplate({ role_name, joinUrl, inviteId, org_id, expires_at }) {
       <p style="margin: 4px 0; font-size: 14px;"><strong>Role:</strong> ${role_name}</p>
       <p style="margin: 4px 0; font-size: 14px;"><strong>Invite ID:</strong> <code style="background: #E5E7EB; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${inviteId}</code></p>
       <p style="margin: 4px 0; font-size: 14px;"><strong>Organization ID:</strong> <code style="background: #E5E7EB; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${org_id}</code></p>
-      <p style="margin: 4px 0; font-size: 14px;"><strong>Expires:</strong> ${new Date(expires_at).toLocaleDateString('en-US', { 
+      <p style="margin: 4px 0; font-size: 14px;"><strong>Expires:</strong> ${new Date(expires_at).toLocaleString('en-US', { 
         year: 'numeric', 
         month: 'long', 
         day: 'numeric',
@@ -124,11 +124,21 @@ If you did not authorize these changes, please contact our support team immediat
 }
 
 function inviteTextTemplate({ role_name, joinUrl, inviteId, org_id, expires_at }) {
+  const formattedExpiry = new Date(expires_at).toLocaleString('en-US', {
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short'
+  });
+  
   return `You have been invited to join troo.earth as ${role_name}.
 Join URL: ${joinUrl}
 Invite ID: ${inviteId}
 Organization ID: ${org_id}
-Expires: ${expires_at} (UTC)`;
+Expires: ${formattedExpiry}`;
 }
 
 module.exports = { accountCreatedTemplate, accountCreatedTextTemplate, accountUpdatedTemplate, accountUpdatedTextTemplate, inviteTemplate, inviteTextTemplate };

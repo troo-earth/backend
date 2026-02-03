@@ -3,6 +3,7 @@ const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
 const sessionManager = require('../../utils/sessionManager');
 const User = require('./userModel');
+const { Role } = require('../../models/associations');
 
 async function createUserController(req, res, next) {
   try {
@@ -20,8 +21,20 @@ async function createUserController(req, res, next) {
     const { password_hash, ...safeUser } =
       user.toJSON ? user.toJSON() : user;
 
-    // Derive role_name from the newly created user instead of copying from the existing session
-    const role_name = user.role_name || null;
+    // Fetch role_name from Roles table using role_id (like login does)
+    let role_name = null;
+    if (user.role_id) {
+      try {
+        const role = await Role.findByPk(user.role_id, {
+          attributes: ['role_name']
+        });
+        if (role && role.role_name) {
+          role_name = role.role_name;
+        }
+      } catch (e) {
+        console.error('Error fetching role details during user creation', e && e.message ? e.message : e);
+      }
+    }
 
     // 🔒 Rotate session + respond ONLY inside callback
     req.session.regenerate((err) => {

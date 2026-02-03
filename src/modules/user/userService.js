@@ -222,7 +222,8 @@ async function deleteUserService(user_id, sessionUser = null) {
     } else if (user.role_id) {
       // Fallback to database query for other users or when session data unavailable
       const role = await Role.findByPk(user.role_id, {
-        attributes: ['role_name']
+        attributes: ['role_name'],
+        transaction: t // Ensure read consistency within the transaction
       });
       if (role && role.role_name) {
         user_role_name = role.role_name;
@@ -234,7 +235,8 @@ async function deleteUserService(user_id, sessionUser = null) {
       // Get ADMIN role using Sequelize
       const adminRole = await Role.findOne({
         where: { role_name: 'ADMIN' },
-        attributes: ['role_id']
+        attributes: ['role_id'],
+        transaction: t // Ensure consistent view within the transaction
       });
       
       if (adminRole && adminRole.role_id) {

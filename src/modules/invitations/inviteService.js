@@ -257,16 +257,18 @@ async function joinOrganizationService({ invite_id, org_id, user_name, email, pa
         transaction
       });
     } else {
-      // User doesn't exist, create new account
-      // Note: createUserService sends welcome email outside transaction (non-blocking)
-      user = await createUserService({
-        user_name,
-        email,
-        password,
-        fullname,
-        org_id: invite.org_id,
-        role_id: invite.role_id,
-      });
+      // User doesn't exist, create new account within the same transaction
+      user = await User.create(
+        {
+          user_name,
+          email,
+          password,
+          fullname,
+          org_id: invite.org_id,
+          role_id: invite.role_id,
+        },
+        { transaction }
+      );
     }
 
     // Commit the transaction - invitation consumed and user updated/created

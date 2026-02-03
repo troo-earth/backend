@@ -1,5 +1,4 @@
 const express = require('express');
-const { requirePermission } = require('../../middleware/rbacMiddleware');
 const {
   inviteUserController,
   revokeInviteController,

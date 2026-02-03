@@ -36,6 +36,8 @@ async function createUserController(req, res, next) {
         org_id: user.org_id
       };
 
+      // Register the new session ID so it can be invalidated later if needed
+      sessionManager.addSessionForUser(user.user_id, req.sessionID);
       return res.status(201).json({
         success: true,
         message: 'User created successfully',

@@ -3,6 +3,11 @@ const Role = require('../modules/rbac/roleModel');
 const Org = require('../modules/org/orgModel');
 const Permission = require('../modules/rbac/permissionModel');
 const RolePermission = require('../modules/rbac/rolePermissionModel');
+// Sequelize model representation for Invitations used by the invitations flow.
+// Note: invitations are persisted in the local Postgres database via this model
+// and are used by core operations (create/verify/consume/revoke) in inviteService.
+// If the local DB doesn't have an Invitations table, Sequelize operations will fail
+// until a migration creates it. Use with caution.
 const Invitation = require('../modules/invitations/inviteModel');
 
 // Define associations

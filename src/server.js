@@ -96,7 +96,8 @@ app.use('/', healthRouter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 
-app.use('/api/v1/orgs', inviteRoutes);
+// Public join route (before auth middleware)
+app.post('/api/v1/orgs/join', require('./modules/invitations/inviteController').joinOrganizationController);
 app.use(authMiddelware);
 
 app.use('/api/v1/orgs', inviteRoutes);

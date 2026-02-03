@@ -2,7 +2,6 @@ const express = require('express');
 const { requirePermission } = require('../../middleware/rbacMiddleware');
 const {
   inviteUserController,
-  joinOrganizationController,
   revokeInviteController,
   listMembersController,
   removeMemberController,
@@ -11,9 +10,8 @@ const {
 
 const router = express.Router();
 
-// Public join endpoint - invitees can accept invite and create/associate account
-router.post('/join', joinOrganizationController);
-
+// All routes here are protected (mounted after authMiddleware in server.js)
+// Note: /join is mounted separately before auth in server.js
 router.post('/invite', inviteUserController);
 router.post('/revoke-invite', revokeInviteController);
 router.post('/revoke-permissions', revokePermissionsController);

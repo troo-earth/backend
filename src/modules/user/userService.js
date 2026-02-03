@@ -9,7 +9,7 @@ const { sendEmail } = require('../emails/emailService');
 const { accountCreatedTemplate, accountCreatedTextTemplate, accountUpdatedTemplate, accountUpdatedTextTemplate } = require('../emails/emailTemplates');
 const { validate: isValidUUID } = require('uuid');
 
-async function createUserService({ user_name, email, password, fullname }) {
+async function createUserService({ user_name, email, password, fullname, org_id, role_id }) {
   // Validate and sanitize inputs
   if (!user_name || typeof user_name !== 'string' || user_name.trim() === '') {
     throw new Error('Username is required and must be a non-empty string');
@@ -25,6 +25,15 @@ async function createUserService({ user_name, email, password, fullname }) {
 
   if (!fullname || typeof fullname !== 'string' || fullname.trim() === '') {
     throw new Error('Full name is required and must be a non-empty string');
+  }
+
+  // Validate optional UUID fields
+  if (org_id && !isValidUUID(org_id)) {
+    throw new Error('Invalid org_id format');
+  }
+
+  if (role_id && !isValidUUID(role_id)) {
+    throw new Error('Invalid role_id format');
   }
 
   // Check for invalid characters in fullname (letters, spaces, hyphens, apostrophes only)
@@ -58,12 +67,18 @@ async function createUserService({ user_name, email, password, fullname }) {
   const password_hash = await bcrypt.hash(password, 10);
 
   // Create user in DB
-  const newUser = await User.create({
+  const userData = {
     user_name: trimmedUsername,
     email: normalizedEmail,
     password_hash,
-    fullname: cleanedFullname,  // Add cleaned fullname to DB
-  });
+    fullname: cleanedFullname,
+  };
+
+  // Add optional org/role fields if provided
+  if (org_id) userData.org_id = org_id;
+  if (role_id) userData.role_id = role_id;
+
+  const newUser = await User.create(userData);
 
   // Send welcome email using first name (non-blocking)
   const html = accountCreatedTemplate({ user_name: firstName });

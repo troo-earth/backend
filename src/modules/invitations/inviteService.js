@@ -191,11 +191,10 @@ async function joinOrganizationService({ invite_id, org_id, user_name, email, pa
   let user;
   if (existing) {
     // User exists, just associate with org and assign role
-    user = await User.update(
+    await User.update(
       {
         org_id: invite.org_id,
         role_id: invite.role_id,
-        // No longer storing role_name in Users table
       },
       { where: { email: email.toLowerCase() } }
     );

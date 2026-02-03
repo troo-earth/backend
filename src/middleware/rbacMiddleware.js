@@ -99,15 +99,6 @@ function requirePermission(permissionKey) {
   };
 }
 
-// Optional: Clean up expired cache entries periodically to prevent memory leaks
-setInterval(() => {
-  const now = Date.now();
-  for (const [roleId, cached] of rolePermissionsCache) {
-    if (cached.expires <= now) {
-      rolePermissionsCache.delete(roleId);
-    }
-  }
-}, 5 * 60 * 1000); // Clean up every 5 minutes
 
 module.exports = { 
   requirePermission, 

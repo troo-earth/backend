@@ -176,11 +176,14 @@ async function revokeInvitation({ invite_id, revoked_by }) {
 
 // Business logic for inviting a user
 async function inviteUserService({ email, role_name, org_id, invited_by_user_id, inviter_role_name }) {
+  const inviterRole = String(inviter_role_name).toUpperCase();
+  const targetRole = String(role_name).toUpperCase();
+
   // Authorization: ADMIN can invite any; MANAGER can only invite VIEWER
-  if (inviter_role_name === 'MANAGER' && role_name !== 'VIEWER') {
+  if (inviterRole === 'MANAGER' && targetRole !== 'VIEWER') {
     throw new Error('Managers may only invite VIEWERs');
   }
-  if (inviter_role_name !== 'ADMIN' && inviter_role_name !== 'MANAGER') {
+  if (inviterRole !== 'ADMIN' && inviterRole !== 'MANAGER') {
     throw new Error('Only ADMIN or MANAGER may invite users');
   }
 
@@ -254,16 +257,18 @@ async function joinOrganizationService({ invite_id, org_id, user_name, email, pa
         transaction
       });
     } else {
-      // User doesn't exist, create new account
-      // Note: createUserService sends welcome email outside transaction (non-blocking)
-      user = await createUserService({
-        user_name,
-        email,
-        password,
-        fullname,
-        org_id: invite.org_id,
-        role_id: invite.role_id,
-      });
+      // User doesn't exist, create new account within the same transaction
+      user = await User.create(
+        {
+          user_name,
+          email,
+          password,
+          fullname,
+          org_id: invite.org_id,
+          role_id: invite.role_id,
+        },
+        { transaction }
+      );
     }
 
     // Commit the transaction - invitation consumed and user updated/created

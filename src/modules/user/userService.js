@@ -1,11 +1,12 @@
 const { isValidEmail, isValidPassword } = require('../../utils/validation');
 const { withLogging } = require('../../utils/logger');
 const User = require('./userModel');
+const { Role } = require('../../models/associations');
 const bcrypt = require('bcrypt');
 const { Op } = require('sequelize');
 const sequelize = require('../../config/database');
 const { sendEmail } = require('../emails/emailService');
-const { accountCreatedTemplate, accountUpdatedTemplate } = require('../emails/emailTemplates');
+const { accountCreatedTemplate, accountCreatedTextTemplate, accountUpdatedTemplate, accountUpdatedTextTemplate } = require('../emails/emailTemplates');
 const { validate: isValidUUID } = require('uuid');
 
 async function createUserService({ user_name, email, password, fullname }) {
@@ -66,10 +67,13 @@ async function createUserService({ user_name, email, password, fullname }) {
 
   // Send welcome email using first name (non-blocking)
   const html = accountCreatedTemplate({ user_name: firstName });
+  const text = accountCreatedTextTemplate({ user_name: firstName });
+  
   sendEmail({
     to: normalizedEmail,
     subject: 'Welcome to troo.earth!',
     html,
+    text,
   }).catch((error) => {
     console.error(`Failed to send welcome email to ${normalizedEmail}:`, error.message);
     // Optionally, queue for retry or log to monitoring service
@@ -156,13 +160,15 @@ async function updateUserService(user_id, updateFields) {
   const nameForEmail =
     updateFields.fullname || updatedUser.fullname || updatedUser.user_name;
 
-  const firstName = nameForEmail.split(' ')[0];
-  const html = accountUpdatedTemplate({ user_name: firstName });
+  const firstNameForUpdate = nameForEmail.split(' ')[0];
+  const html = accountUpdatedTemplate({ user_name: firstNameForUpdate });
+  const text = accountUpdatedTextTemplate({ user_name: firstNameForUpdate });
 
   sendEmail({
     to: updatedUser.email,
     subject: 'Your troo.earth Account Was Updated',
     html,
+    text,
   }).catch(err => {
     console.error(
       `Failed to send update email to ${updatedUser.email}:`,
@@ -181,7 +187,7 @@ async function viewUserService(user_id) {
   return user;
 }
 
-async function deleteUserService(user_id) {
+async function deleteUserService(user_id, sessionUser = null) {
   if (!user_id) throw new Error('Missing user ID');
 
   // Use a transaction to ensure atomicity and prevent race conditions
@@ -194,23 +200,45 @@ async function deleteUserService(user_id) {
     
     if (!user) throw new Error('User not found');
 
+    // Get user's role_name - prefer from session if available, otherwise query database
+    let user_role_name = null;
+    if (sessionUser && sessionUser.user_id === user_id && sessionUser.role_name) {
+      // Use role_name from session if it's the same user
+      user_role_name = sessionUser.role_name;
+    } else if (user.role_id) {
+      // Fallback to database query for other users or when session data unavailable
+      const role = await Role.findByPk(user.role_id, {
+        attributes: ['role_name']
+      });
+      if (role && role.role_name) {
+        user_role_name = role.role_name;
+      }
+    }
+
     // If user is ADMIN and belongs to an org, ensure there is at least one other ADMIN
-    if (user.role_name === 'ADMIN' && user.org_id) {
-      // Count admins in the organization with shared lock to prevent concurrent admin deletions
-      // Use FOR SHARE lock to allow concurrent reads but prevent modifications
-      const adminCount = await User.count({ 
-        where: { 
-          org_id: user.org_id, 
-          role_name: 'ADMIN' 
-        },
-        lock: t.LOCK.SHARE, // Shared lock prevents concurrent admin role changes/deletions
-        transaction: t
+    if (user_role_name === 'ADMIN' && user.org_id) {
+      // Get ADMIN role using Sequelize
+      const adminRole = await Role.findOne({
+        where: { role_name: 'ADMIN' },
+        attributes: ['role_id']
       });
       
-      if (adminCount <= 1) {
-        const err = new Error('Cannot delete the sole admin of an organization. Please assign another admin first.');
-        err.code = 'SOLE_ADMIN';
-        throw err;
+      if (adminRole && adminRole.role_id) {
+        // Count admins in the organization with shared lock to prevent concurrent admin deletions
+        const adminCount = await User.count({ 
+          where: { 
+            org_id: user.org_id, 
+            role_id: adminRole.role_id // Use role_id instead of role_name
+          },
+          lock: t.LOCK.SHARE, // Shared lock prevents concurrent admin role changes/deletions
+          transaction: t
+        });
+        
+        if (adminCount <= 1) {
+          const err = new Error('Cannot delete the sole admin of an organization. Please assign another admin first.');
+          err.code = 'SOLE_ADMIN';
+          throw err;
+        }
       }
     }
 

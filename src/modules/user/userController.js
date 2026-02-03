@@ -20,6 +20,9 @@ async function createUserController(req, res, next) {
     const { password_hash, ...safeUser } =
       user.toJSON ? user.toJSON() : user;
 
+    // Use role_name from session instead of querying database
+    const role_name = req.session?.user?.role_name || null;
+
     // 🔒 Rotate session + respond ONLY inside callback
     req.session.regenerate((err) => {
       if (err) return next(err);
@@ -29,7 +32,7 @@ async function createUserController(req, res, next) {
         fullname: user.fullname,
         email: user.email,
         role_id: user.role_id,
-        role_name: user.role_name,
+        role_name: role_name, // Fetched from Roles table
         org_id: user.org_id
       };
 
@@ -151,7 +154,7 @@ async function deleteAccountController(req, res, next) {
 
     // Delegate deletion and sole-admin guard to service FIRST
     try {
-      await deleteUserService(userId);
+      await deleteUserService(userId, actor); // Pass session data to avoid unnecessary DB query
     } catch (err) {
       if (err && (err.code === 'SOLE_ADMIN' || err.message === 'Sole admin')) {
         return res.status(400).json({

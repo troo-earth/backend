@@ -33,10 +33,6 @@ const User = sequelize.define('User', {
     type: DataTypes.UUID,
     allowNull: true,
   },
-  role_name: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
 }, {
   tableName: 'Users',
   timestamps: true,

@@ -1,8 +1,7 @@
 const { loginUserService, verifyUserService, logoutUserService } = require('./authService');
 const { withLogging } = require('../../utils/logger');
 const sessionManager = require('../../utils/sessionManager');
-const supabase = require('../../config/supabase');
-const User = require('../user/userModel');
+const { Role } = require('../../models/associations');
 
 async function loginUserController(req, res, next) {
   try {
@@ -15,36 +14,32 @@ async function loginUserController(req, res, next) {
     // Call the service to authenticate and get the user
     const user = await loginUserService({ email, password });
 
-    // If user has a role_id but no role_name, try to populate it from Supabase Roles
-    try {
-      if (user && user.role_id && !user.role_name) {
-        const { data: roleRow, error: roleErr } = await supabase.from('Roles').select('role_name').eq('role_id', user.role_id).limit(1).maybeSingle();
-        if (!roleErr && roleRow && roleRow.role_name) {
-          // persist to Users table for easier reads later
-          try {
-            await User.update({ role_name: roleRow.role_name }, { where: { user_id: user.user_id } });
-            // reflect on the returned user object for session
-            user.role_name = roleRow.role_name;
-          } catch (e) {
-            console.error('Failed to persist role_name to Users table', e && e.message ? e.message : e);
-          }
+    // Always fetch role details from Roles table using role_id with Sequelize
+    let role_name = null;
+    if (user && user.role_id) {
+      try {
+        const role = await Role.findByPk(user.role_id, {
+          attributes: ['role_name']
+        });
+        if (role && role.role_name) {
+          role_name = role.role_name;
         }
+      } catch (e) {
+        console.error('Error fetching role details during login', e && e.message ? e.message : e);
       }
-    } catch (e) {
-      console.error('Error while normalizing user role_name from Supabase', e && e.message ? e.message : e);
     }
 
     // IMPORTANT: rotate session ID and persist session mapping in Redis
     req.session.regenerate((err) => {
       if (err) return next(err);
 
-      // Attach identity to session
+      // Attach identity to session with role details fetched from Roles table
       req.session.user = {
         user_id: user.user_id,
         fullname: user.fullname,
         email: user.email,
         role_id: user.role_id,
-        role_name: user.role_name,
+        role_name: role_name, // Fetched from Roles table, not stored in Users
         org_id: user.org_id,
       };
 

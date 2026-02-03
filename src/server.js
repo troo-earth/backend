@@ -2,10 +2,12 @@ require('dotenv').config();
 const express = require('express');
 const sequelize = require('./config/database');
 
+require('./models/associations');
+
 const userRoutes = require('./modules/user/userRoutes');
 const marketplaceRoutes = require('./modules/marketplace/marketplaceRoutes');
 const orgRoutes = require('./modules/org/orgRoutes');
-const { publicRouter: invitePublicRoutes, protectedRouter: inviteProtectedRoutes } = require('./modules/invitations/inviteRoutes');
+const inviteRoutes = require('./modules/invitations/inviteRoutes');
 const authRoutes = require('./modules/auth/authRoutes');
 const listingRoutes = require('./modules/listing/listingRoutes');
 const holdingsRoutes = require('./modules/holdings/holdingsRoutes');
@@ -94,15 +96,10 @@ app.use('/', healthRouter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 
-// Public org routes (invite join) - mounted before auth middleware so invitees can accept without a session
-app.use('/api/v1/orgs/public', invitePublicRoutes);
-
+app.use('/api/v1/orgs', inviteRoutes);
 app.use(authMiddelware);
 
-// Protected invite routes (require authentication)
-// Mounted after global auth middleware so these routes remain protected without redundant checks.
-app.use('/api/v1/orgs', inviteProtectedRoutes);
-
+app.use('/api/v1/orgs', inviteRoutes);
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
 app.use('/api/v1/listings', listingRoutes);

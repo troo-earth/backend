@@ -1,4 +1,4 @@
-const supabase = require('../config/supabase');
+const { Role, Permission } = require('../models/associations');
 
 // In-memory cache for role permissions
 // Structure: { role_id: { permissions: Set(['BUY', 'SELL', ...]), expires: timestamp } }
@@ -20,19 +20,23 @@ async function getRolePermissions(roleId) {
   }
 
   try {
-    // Query RolePermissions -> Permissions for this role
-    const { data, error } = await supabase
-      .from('RolePermissions')
-      .select('permission:permission_id(permission_key)')
-      .eq('role_id', roleId);
+    // Query Role with associated Permissions using Sequelize
+    const role = await Role.findByPk(roleId, {
+      include: [{
+        model: Permission,
+        as: 'permissions',
+        attributes: ['permission_key'],
+        through: { attributes: [] } // Don't include junction table attributes
+      }]
+    });
 
-    if (error) {
-      console.error('RBAC supabase error', error);
-      throw new Error('Failed to fetch role permissions');
+    if (!role) {
+      console.warn(`Role not found: ${roleId}`);
+      return new Set();
     }
 
-    const permissionKeys = (data || [])
-      .map(rp => rp.permission?.permission_key)
+    const permissionKeys = (role.permissions || [])
+      .map(permission => permission.permission_key)
       .filter(Boolean);
 
     const permissionSet = new Set(permissionKeys);

@@ -9,18 +9,15 @@ const {
   revokePermissionsController,
 } = require('./inviteController');
 
-const publicRouter = express.Router();
-const protectedRouter = express.Router();
+const router = express.Router();
 
 // Public join endpoint - invitees can accept invite and create/associate account
-publicRouter.post('/join', joinOrganizationController);
+router.post('/join', joinOrganizationController);
 
-// Protected invite endpoints (require auth via server mount)
-// These routes will be mounted after the auth middleware in server.js
-protectedRouter.post('/invite', inviteUserController);
-protectedRouter.post('/revoke-invite', revokeInviteController);
-protectedRouter.post('/revoke-permissions', revokePermissionsController);
-protectedRouter.get('/members', requirePermission('USER_MANAGEMENT'), listMembersController);
-protectedRouter.delete('/members/:id', requirePermission('USER_MANAGEMENT'), removeMemberController);
+router.post('/invite', inviteUserController);
+router.post('/revoke-invite', revokeInviteController);
+router.post('/revoke-permissions', revokePermissionsController);
+router.get('/members', requirePermission('USER_MANAGEMENT'), listMembersController);
+router.delete('/members/:id', requirePermission('USER_MANAGEMENT'), removeMemberController);
 
-module.exports = { publicRouter, protectedRouter };
+module.exports = router;

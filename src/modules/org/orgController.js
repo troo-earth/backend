@@ -5,6 +5,7 @@ const {
 } = require('./orgService');
 const { withLogging } = require('../../utils/logger');
 const User = require('../user/userModel');
+const { Role } = require('../../models/associations');
 
 async function createOrgController(req, res, next) {
   try {
@@ -20,9 +21,17 @@ async function createOrgController(req, res, next) {
     // Refresh role fields from DB (so creator immediately has ADMIN in-session)
     try {
       const dbUser = await User.findByPk(req.session.user.user_id);
-      if (dbUser) {
-        req.session.user.role_id = dbUser.role_id || null;
-        req.session.user.role_name = dbUser.role_name || null;
+      if (dbUser && dbUser.role_id) {
+        req.session.user.role_id = dbUser.role_id;
+        
+        // Fetch role_name from Roles table using Sequelize
+        const role = await Role.findByPk(dbUser.role_id, {
+          attributes: ['role_name']
+        });
+        if (role && role.role_name) {
+          req.session.user.role_name = role.role_name;
+        }
+        
         // persist session change
         req.session.save((err) => {
           if (err) console.error('Failed to save session after role assignment', err);

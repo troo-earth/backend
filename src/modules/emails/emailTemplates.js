@@ -99,6 +99,30 @@ function inviteTemplate({ role_name, joinUrl, inviteId, org_id, expires_at }) {
   return emailLayout(content);
 }
 
+function accountCreatedTextTemplate({ user_name }) {
+  return `Welcome to troo.earth, ${user_name}!
+
+Thank you for joining troo.earth. Your account has been successfully created, and you are now part of a community dedicated to transparent and impactful carbon offsetting.
+
+We believe that investing in our planet should be simple, transparent, and accessible. You can now browse our verified projects and start making a difference today.
+
+Visit: https://dev.troo.earth/
+
+If you did not sign up for this account, please contact our support team immediately.
+
+— The troo.earth Team`;
+}
+
+function accountUpdatedTextTemplate({ user_name }) {
+  return `Hello ${user_name},
+
+Your troo.earth account information has been successfully updated. If you made these changes, no further action is required.
+
+If you did not authorize these changes, please contact our support team immediately at support@troo.earth or sign in to your account to review recent activity.
+
+— The troo.earth Team`;
+}
+
 function inviteTextTemplate({ role_name, joinUrl, inviteId, org_id, expires_at }) {
   return `You have been invited to join troo.earth as ${role_name}.
 Join URL: ${joinUrl}
@@ -107,4 +131,4 @@ Organization ID: ${org_id}
 Expires: ${expires_at} (UTC)`;
 }
 
-module.exports = { accountCreatedTemplate, accountUpdatedTemplate, inviteTemplate, inviteTextTemplate };
+module.exports = { accountCreatedTemplate, accountCreatedTextTemplate, accountUpdatedTemplate, accountUpdatedTextTemplate, inviteTemplate, inviteTextTemplate };

@@ -3,7 +3,7 @@ const { invalidatePermissionsCache } = require('../../middleware/rbacMiddleware'
 const { v4: uuidv4 } = require('uuid');
 const User = require('../user/userModel');
 const Org = require('./orgModel');
-const supabase = require('../../config/supabase');
+const { Role } = require('../../models/associations');
 
 function generateOrgCode(org_name, org_id) {
   const prefix = org_name
@@ -57,16 +57,13 @@ async function createOrgService(payload, sessionUser) {
 
   // 3️⃣ Assign ADMIN role to creator (if Roles table has ADMIN)
   try {
-    const { data: roles, error } = await supabase
-      .from('Roles')
-      .select('*')
-      .eq('role_name', 'ADMIN')
-      .limit(1);
+    const adminRole = await Role.findOne({
+      where: { role_name: 'ADMIN' }
+    });
 
-    if (!error && roles && roles.length > 0) {
-      const adminRole = roles[0];
+    if (adminRole) {
       await User.update(
-        { role_id: adminRole.role_id, role_name: adminRole.role_name },
+        { role_id: adminRole.role_id }, // Only set role_id, not role_name
         { where: { user_id: sessionUser.user_id } }
       );
       

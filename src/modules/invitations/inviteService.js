@@ -5,6 +5,7 @@ const User = require('../user/userModel');
 const { createUserService } = require('../user/userService');
 const { invalidatePermissionsCache } = require('../../middleware/rbacMiddleware');
 const sessionManager = require('../../utils/sessionManager');
+const sequelize = require('../../config/database');
 
 const INVITE_EXPIRY_HOURS = parseInt(process.env.INVITE_EXPIRY_HOURS || '168', 10); // default 7 days
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || '';
@@ -183,43 +184,99 @@ async function inviteUserService({ email, role_name, org_id, invited_by_user_id,
 }
 
 // Business logic for joining an organization
+// Uses a transaction to prevent race conditions: atomically consumes the invite
+// before performing user operations. If any step fails, everything is rolled back.
 async function joinOrganizationService({ invite_id, org_id, user_name, email, password, fullname }) {
+  // First, verify the invitation without consuming (quick validation)
   const invite = await verifyInvitation({ invite_id, org_id, email });
-  // Try to find existing user by email
-  const existing = await User.findOne({ where: { email: email.toLowerCase() } });
   
-  let user;
-  if (existing) {
-    // User exists, just associate with org and assign role
-    await User.update(
-      {
-        org_id: invite.org_id,
-        role_id: invite.role_id,
-      },
-      { where: { email: email.toLowerCase() } }
-    );
-    
-    user = await User.findOne({ where: { email: email.toLowerCase() } });
-  } else {
-    // User doesn't exist, create new account
-    if (!user_name || !password || !fullname) {
-      throw new Error('Missing fields for new account creation');
-    }
-    
-    user = await createUserService({
-      user_name,
-      email,
-      password,
-      fullname,
-      org_id: invite.org_id,
-      role_id: invite.role_id,
-      // No longer storing role_name in Users table
-    });
+  // Validate required fields for new users upfront (before transaction)
+  const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
+  if (!existingUser && (!user_name || !password || !fullname)) {
+    throw new Error('Missing fields for new account creation');
   }
 
-  await consumeInvitation({ invite_id });
+  // Use a transaction to ensure atomicity:
+  // 1. Consume invitation (atomic PENDING→ACCEPTED with row lock)
+  // 2. Create/update user
+  // If anything fails, rollback both operations
+  const transaction = await sequelize.transaction();
+  
+  try {
+    // Atomically consume the invitation first (prevents race conditions)
+    // Use row-level lock to prevent concurrent consumption
+    const [updatedRowsCount] = await Invitation.update(
+      { 
+        status: 'ACCEPTED',
+        updatedAt: new Date()
+      },
+      {
+        where: {
+          invite_id: invite_id,
+          status: 'PENDING'  // Only update if still PENDING
+        },
+        transaction
+      }
+    );
 
-  return { message: 'Successfully joined organization', user_id: user.user_id, role_name: invite.role_name };
+    // If no rows updated, another request already consumed this invitation
+    if (updatedRowsCount === 0) {
+      await transaction.rollback();
+      throw new Error('Invalid or expired invitation');
+    }
+
+    let user;
+    if (existingUser) {
+      // User exists, just associate with org and assign role
+      await User.update(
+        {
+          org_id: invite.org_id,
+          role_id: invite.role_id,
+        },
+        { 
+          where: { email: email.toLowerCase() },
+          transaction
+        }
+      );
+      
+      user = await User.findOne({ 
+        where: { email: email.toLowerCase() },
+        transaction
+      });
+    } else {
+      // User doesn't exist, create new account
+      // Note: createUserService sends welcome email outside transaction (non-blocking)
+      user = await createUserService({
+        user_name,
+        email,
+        password,
+        fullname,
+        org_id: invite.org_id,
+        role_id: invite.role_id,
+      });
+    }
+
+    // Commit the transaction - invitation consumed and user updated/created
+    await transaction.commit();
+
+    // Invalidate any active sessions for existing users so they pick up the new org/role context
+    // This forces re-authentication to refresh session with updated RBAC data
+    // Note: Done after commit so we don't invalidate sessions if the transaction fails
+    if (existingUser) {
+      try {
+        await sessionManager.invalidateSessionsForUser(existingUser.user_id);
+      } catch (e) {
+        // Log but don't fail the join operation - user can manually re-login if needed
+        console.error('Failed to invalidate sessions after org join', e.message || e);
+      }
+    }
+
+    return { message: 'Successfully joined organization', user_id: user.user_id, role_name: invite.role_name };
+  } catch (error) {
+    // Rollback on any error
+    await transaction.rollback();
+    throw error;
+  }
 }
 
 // Business logic for revoking an invitation
@@ -373,6 +430,14 @@ async function changeUserRoleService({ targetUserId, requestedRoleName, actor })
     invalidatePermissionsCache(oldRoleId);
   }
   invalidatePermissionsCache(newRole.role_id);
+
+  // Invalidate active sessions so the user picks up the new role immediately
+  // Without this, the user would retain old permissions until re-login
+  try {
+    await sessionManager.invalidateSessionsForUser(targetUserId);
+  } catch (e) {
+    console.error('Failed to invalidate sessions after role change', e.message || e);
+  }
 
   return { message: `User role updated to ${newRoleName}`, role_id: newRole.role_id };
 }

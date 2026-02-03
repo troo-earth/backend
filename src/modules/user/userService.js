@@ -214,21 +214,20 @@ async function deleteUserService(user_id, sessionUser = null) {
     
     if (!user) throw new Error('User not found');
 
-    // Get user's role_name - prefer from session if available, otherwise query database
+    // Determine user's role_name from the database using the locked user row as source of truth
     let user_role_name = null;
-    if (sessionUser && sessionUser.user_id === user_id && sessionUser.role_name) {
-      // Use role_name from session if it's the same user
-      user_role_name = sessionUser.role_name;
-    } else if (user.role_id) {
-      // Fallback to database query for other users or when session data unavailable
+    if (user.role_id) {
       const role = await Role.findByPk(user.role_id, {
-        attributes: ['role_name']
+        attributes: ['role_name'],
+        transaction: t
       });
       if (role && role.role_name) {
         user_role_name = role.role_name;
       }
     }
 
+    // Note: we intentionally do not trust sessionUser.role_name here to avoid stale session issues
+    // that could bypass the sole-admin check.
     // If user is ADMIN and belongs to an org, ensure there is at least one other ADMIN
     if (user_role_name === 'ADMIN' && user.org_id) {
       // Get ADMIN role using Sequelize

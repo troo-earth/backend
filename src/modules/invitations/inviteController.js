@@ -53,8 +53,27 @@ async function joinOrganizationController(req, res, next) {
 
     return res.success(message, { user_id });
   } catch (err) {
-    // Map expected errors
-    if (['Invalid or expired invitation', 'Invitation expired', 'Invitation email mismatch', 'Missing fields for new account creation'].includes(err.message)) {
+    // Map expected errors to appropriate HTTP status codes
+    const badRequestErrors = [
+      'Invalid or expired invitation',
+      'Invitation expired',
+      'Invitation email mismatch',
+      'Missing fields for new account creation',
+      'Invalid invite identifier format',
+      'Invalid organization identifier format',
+      'Missing invite identifier',
+      'Username is required and must be a non-empty string',
+      'Invalid email format',
+      'Invalid password format',
+      'Full name is required and must be a non-empty string',
+      'Full name contains invalid characters (only letters, spaces, hyphens, and apostrophes allowed)',
+      'Invalid org_id format',
+      'Invalid role_id format',
+      'Email already registered',
+      'Username already registered'
+    ];
+    
+    if (badRequestErrors.includes(err.message)) {
       return res.error(err.message, 400);
     }
     next(err);

@@ -6,6 +6,7 @@ const { createUserService } = require('../user/userService');
 const { invalidatePermissionsCache } = require('../../middleware/rbacMiddleware');
 const sessionManager = require('../../utils/sessionManager');
 const sequelize = require('../../config/database');
+const { validate: isValidUUID } = require('uuid');
 
 const INVITE_EXPIRY_HOURS = parseInt(process.env.INVITE_EXPIRY_HOURS || '168', 10); // default 7 days
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || '';
@@ -57,9 +58,19 @@ async function createInvitation({ email, org_id, invited_by_user_id, role_name }
 }
 
 async function verifyInvitation({ invite_id, org_id, email }) {
-  // Look up by invite_id and pending status. If org_id is provided (from URL), validate it matches.
+  // Validate required identifier
   if (!invite_id) throw new Error('Missing invite identifier');
+  
+  // Validate UUID format to prevent database errors
+  if (!isValidUUID(invite_id)) {
+    throw new Error('Invalid invite identifier format');
+  }
+  
+  if (org_id && !isValidUUID(org_id)) {
+    throw new Error('Invalid organization identifier format');
+  }
 
+  // Look up by invite_id and pending status. If org_id is provided (from URL), validate it matches.
   const whereClause = {
     invite_id: invite_id,
     status: 'PENDING'
@@ -221,7 +232,6 @@ async function joinOrganizationService({ invite_id, org_id, user_name, email, pa
 
     // If no rows updated, another request already consumed this invitation
     if (updatedRowsCount === 0) {
-      await transaction.rollback();
       throw new Error('Invalid or expired invitation');
     }
 
@@ -273,8 +283,13 @@ async function joinOrganizationService({ invite_id, org_id, user_name, email, pa
 
     return { message: 'Successfully joined organization', user_id: user.user_id, role_name: invite.role_name };
   } catch (error) {
-    // Rollback on any error
-    await transaction.rollback();
+    // Rollback on any error - but only if transaction hasn't already been rolled back
+    try {
+      await transaction.rollback();
+    } catch (rollbackError) {
+      // Transaction was already rolled back or finished, ignore
+      console.error('Transaction rollback skipped (already finished):', rollbackError.message);
+    }
     throw error;
   }
 }

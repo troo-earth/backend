@@ -15,7 +15,7 @@ const router = express.Router();
 router.post('/invite', inviteUserController);
 router.post('/revoke-invite', revokeInviteController);
 router.post('/revoke-permissions', revokePermissionsController);
-router.get('/members', requirePermission('USER_MANAGEMENT'), listMembersController);
-router.delete('/members/:id', requirePermission('USER_MANAGEMENT'), removeMemberController);
+router.get('/members', listMembersController);
+router.delete('/members/:id', removeMemberController);
 
 module.exports = router;

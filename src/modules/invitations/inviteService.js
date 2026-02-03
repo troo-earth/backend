@@ -176,11 +176,14 @@ async function revokeInvitation({ invite_id, revoked_by }) {
 
 // Business logic for inviting a user
 async function inviteUserService({ email, role_name, org_id, invited_by_user_id, inviter_role_name }) {
+  const inviterRole = String(inviter_role_name).toUpperCase();
+  const targetRole = String(role_name).toUpperCase();
+
   // Authorization: ADMIN can invite any; MANAGER can only invite VIEWER
-  if (inviter_role_name === 'MANAGER' && role_name !== 'VIEWER') {
+  if (inviterRole === 'MANAGER' && targetRole !== 'VIEWER') {
     throw new Error('Managers may only invite VIEWERs');
   }
-  if (inviter_role_name !== 'ADMIN' && inviter_role_name !== 'MANAGER') {
+  if (inviterRole !== 'ADMIN' && inviterRole !== 'MANAGER') {
     throw new Error('Only ADMIN or MANAGER may invite users');
   }
 

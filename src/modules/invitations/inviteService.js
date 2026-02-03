@@ -221,6 +221,10 @@ async function revokeInviteService({ invite_id, actor }) {
   
   if (!inv) throw new Error('Invitation not found');
 
+  if (inv.org_id !== actor.org_id) {
+    throw new Error('Invitation not found'); 
+  }
+
   // Authorization
   if (actor.role_name === 'MANAGER' && inv.invited_by_user_id !== actor.user_id) {
     throw new Error('Managers can only revoke invites they created');

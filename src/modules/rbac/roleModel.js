@@ -8,7 +8,7 @@ const Role = sequelize.define('Role', {
     primaryKey: true,
   },
   role_name: {
-    type: DataTypes.STRING(100), // Match VARCHAR(100) from schema
+    type: DataTypes.ENUM('ADMIN', 'MANAGER', 'VIEWER'),
     allowNull: false,
     unique: true,
   },

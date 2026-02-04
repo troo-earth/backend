@@ -32,6 +32,10 @@ async function inviteUserController(req, res, next) {
     if (err.message === 'Failed to create invitation') return res.error(err.message, 500);
     if (err.message === 'Managers may only invite VIEWERs') return res.error(err.message, 403);
     if (err.message === 'Only ADMIN or MANAGER may invite users') return res.error(err.message, 403);
+    if (err.message === 'User must belong to an organization to invite others') return res.error(err.message, 400);
+    if (err.message === 'Inviter user ID is required') return res.error(err.message, 400);
+    if (err.message === 'User is already a member of this organization') return res.error(err.message, 409);
+    if (err.message === 'User already belongs to another organization') return res.error(err.message, 409);
     next(err);
   }
 }

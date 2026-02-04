@@ -8,7 +8,7 @@ const Permission = sequelize.define('Permission', {
     primaryKey: true,
   },
   permission_key: {
-    type: DataTypes.STRING(64), // Match VARCHAR(64) from schema
+    type: DataTypes.ENUM('BUY', 'RETIRE', 'SELL', 'TRANSFER', 'USER_MANAGEMENT', 'VIEW'),
     allowNull: false,
     unique: true,
   },

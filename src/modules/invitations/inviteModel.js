@@ -18,11 +18,11 @@ const Invitation = sequelize.define('Invitation', {
   },
   org_id: {
     type: DataTypes.UUID,
-    allowNull: true,
+    allowNull: false, // Required by database constraint
   },
   invited_by_user_id: {
     type: DataTypes.UUID,
-    allowNull: true,
+    allowNull: false, // Required by database constraint
   },
   role_id: {
     type: DataTypes.UUID,
@@ -34,7 +34,8 @@ const Invitation = sequelize.define('Invitation', {
   },
   status: {
     type: DataTypes.ENUM('PENDING','ACCEPTED','DECLINED','REVOKED'),
-    allowNull: true,
+    allowNull: false, // Required by database constraint
+    defaultValue: 'PENDING',
   },
   revoked_by: {
     type: DataTypes.UUID,

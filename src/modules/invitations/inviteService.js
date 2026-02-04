@@ -176,6 +176,14 @@ async function revokeInvitation({ invite_id, revoked_by }) {
 
 // Business logic for inviting a user
 async function inviteUserService({ email, role_name, org_id, invited_by_user_id, inviter_role_name }) {
+  // Validate required fields
+  if (!org_id) {
+    throw new Error('User must belong to an organization to invite others');
+  }
+  if (!invited_by_user_id) {
+    throw new Error('Inviter user ID is required');
+  }
+
   const inviterRole = String(inviter_role_name).toUpperCase();
   const targetRole = String(role_name).toUpperCase();
 
@@ -185,6 +193,16 @@ async function inviteUserService({ email, role_name, org_id, invited_by_user_id,
   }
   if (inviterRole !== 'ADMIN' && inviterRole !== 'MANAGER') {
     throw new Error('Only ADMIN or MANAGER may invite users');
+  }
+
+  // Check if user already exists and belongs to another organization
+  const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
+  if (existingUser && existingUser.org_id) {
+    if (existingUser.org_id === org_id) {
+      throw new Error('User is already a member of this organization');
+    } else {
+      throw new Error('User already belongs to another organization');
+    }
   }
 
   const { invitation } = await createInvitation({
@@ -257,18 +275,16 @@ async function joinOrganizationService({ invite_id, org_id, user_name, email, pa
         transaction
       });
     } else {
-      // User doesn't exist, create new account within the same transaction
-      user = await User.create(
-        {
-          user_name,
-          email,
-          password,
-          fullname,
-          org_id: invite.org_id,
-          role_id: invite.role_id,
-        },
-        { transaction }
-      );
+      user = await createUserService({
+        user_name,
+        email,
+        password,
+        fullname,
+        org_id: invite.org_id,
+        role_id: invite.role_id,
+        transaction,
+        skipDuplicateChecks: true  // We already checked existingUser above
+      });
     }
 
     // Commit the transaction - invitation consumed and user updated/created

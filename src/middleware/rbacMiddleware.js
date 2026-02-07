@@ -1,22 +1,28 @@
 const { Role, Permission } = require('../models/associations');
+const redisClient = require('../config/redis');
 
-// In-memory cache for role permissions
-// Structure: { role_id: { permissions: Set(['BUY', 'SELL', ...]), expires: timestamp } }
-const rolePermissionsCache = new Map();
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes in milliseconds
+// Redis cache key prefix for role permissions
+const CACHE_KEY_PREFIX = 'rbac:permissions:';
+const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 
 /**
- * Fetch permissions for a role_id from cache or database
+ * Fetch permissions for a role_id from Redis cache or database
  * @param {string} roleId - The role ID to fetch permissions for
  * @returns {Promise<Set>} - Set of permission keys
  */
 async function getRolePermissions(roleId) {
-  const now = Date.now();
-  const cached = rolePermissionsCache.get(roleId);
+  const cacheKey = `${CACHE_KEY_PREFIX}${roleId}`;
   
-  // Return cached permissions if still valid
-  if (cached && cached.expires > now) {
-    return cached.permissions;
+  try {
+    // Try to get from Redis cache first
+    const cached = await redisClient.get(cacheKey);
+    if (cached) {
+      const permissionKeys = JSON.parse(cached);
+      return new Set(permissionKeys);
+    }
+  } catch (cacheError) {
+    // Log but don't fail - fall through to database query
+    console.error('Redis cache read error:', cacheError.message);
   }
 
   try {
@@ -41,11 +47,13 @@ async function getRolePermissions(roleId) {
 
     const permissionSet = new Set(permissionKeys);
     
-    // Cache the result with expiration
-    rolePermissionsCache.set(roleId, {
-      permissions: permissionSet,
-      expires: now + CACHE_TTL
-    });
+    // Cache the result in Redis with TTL
+    try {
+      await redisClient.setEx(cacheKey, CACHE_TTL_SECONDS, JSON.stringify(permissionKeys));
+    } catch (cacheError) {
+      // Log but don't fail the request
+      console.error('Redis cache write error:', cacheError.message);
+    }
 
     return permissionSet;
   } catch (error) {
@@ -59,13 +67,23 @@ async function getRolePermissions(roleId) {
  * Call this when role permissions are modified
  * @param {string} [roleId] - Optional specific role ID to invalidate
  */
-function invalidatePermissionsCache(roleId = null) {
-  if (roleId) {
-    rolePermissionsCache.delete(roleId);
-    console.log(`Invalidated permissions cache for role: ${roleId}`);
-  } else {
-    rolePermissionsCache.clear();
-    console.log('Cleared entire permissions cache');
+async function invalidatePermissionsCache(roleId = null) {
+  try {
+    if (roleId) {
+      const cacheKey = `${CACHE_KEY_PREFIX}${roleId}`;
+      await redisClient.del(cacheKey);
+      console.log(`Invalidated permissions cache for role: ${roleId}`);
+    } else {
+      // Delete all keys matching the prefix pattern
+      const keys = await redisClient.keys(`${CACHE_KEY_PREFIX}*`);
+      if (keys.length > 0) {
+        await redisClient.del(keys);
+      }
+      console.log('Cleared entire permissions cache');
+    }
+  } catch (error) {
+    console.error('Error invalidating permissions cache:', error.message);
+    // Don't throw - cache invalidation failure shouldn't break the app
   }
 }
 

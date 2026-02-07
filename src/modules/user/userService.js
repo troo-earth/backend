@@ -8,7 +8,7 @@ const { sendEmail } = require('../emails/emailService');
 const { accountCreatedTemplate, accountCreatedTextTemplate, accountUpdatedTemplate, accountUpdatedTextTemplate } = require('../emails/emailTemplates');
 const { validate: isValidUUID } = require('uuid');
 
-async function createUserService({ user_name, email, password, fullname, org_id, role_id, transaction, skipDuplicateChecks = false }) {
+async function createUserService({ user_name, email, password, fullname, org_id, role_id }) {
   // Validate and sanitize inputs
   if (!user_name || typeof user_name !== 'string' || user_name.trim() === '') {
     throw new Error('Username is required and must be a non-empty string');
@@ -51,23 +51,18 @@ async function createUserService({ user_name, email, password, fullname, org_id,
 
   const firstName = cleanedFullname.split(' ')[0];
 
-  // Uniqueness checks (can be skipped if caller already verified)
-  if (!skipDuplicateChecks) {
-    const existingEmailUser = await User.findOne({ 
-      where: { email: normalizedEmail },
-      transaction 
-    });
-    if (existingEmailUser) {
-      throw new Error('Email already registered');
-    }
+  const existingEmailUser = await User.findOne({ 
+    where: { email: normalizedEmail }
+  });
+  if (existingEmailUser) {
+    throw new Error('Email already registered');
+  }
 
-    const existingUserNameUser = await User.findOne({ 
-      where: { user_name: trimmedUsername },
-      transaction 
-    });
-    if (existingUserNameUser) {
-      throw new Error('Username already registered');
-    }
+  const existingUserNameUser = await User.findOne({ 
+    where: { user_name: trimmedUsername }
+  });
+  if (existingUserNameUser) {
+    throw new Error('Username already registered');
   }
 
   // Hash password
@@ -85,9 +80,7 @@ async function createUserService({ user_name, email, password, fullname, org_id,
   if (org_id) userData.org_id = org_id;
   if (role_id) userData.role_id = role_id;
 
-  // Support optional transaction for atomic operations
-  const createOptions = transaction ? { transaction } : {};
-  const newUser = await User.create(userData, createOptions);
+  const newUser = await User.create(userData);
 
   // Send welcome email using first name (non-blocking)
   const html = accountCreatedTemplate({ user_name: firstName });

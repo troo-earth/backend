@@ -287,9 +287,7 @@ async function joinOrganizationService({ invite_id, org_id, user_name, email, pa
         password,
         fullname,
         org_id: invite.org_id,
-        role_id: invite.role_id,
-        transaction,
-        skipDuplicateChecks: true  // We already checked existingUser above
+        role_id: invite.role_id
       });
     }
 

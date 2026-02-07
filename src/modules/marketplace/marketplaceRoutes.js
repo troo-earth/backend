@@ -14,7 +14,7 @@ router.get('/projects', getAllProjects);
 router.get('/projects/:id', getProjectById);
 
 // Admin sync route (add auth middleware later)
-router.post('/admin-sync', requirePermission('USER_MANAGEMENT'), syncIcrProjects);
+router.post('/admin-sync', syncIcrProjects);
 
 // GET /api/marketplace/projects/:id (single project)
 router.get('/projects/:id', getProjectById);

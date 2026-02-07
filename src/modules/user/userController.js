@@ -10,10 +10,7 @@ async function createUserController(req, res, next) {
     const { user_name, email, password, fullname } = req.body || {};
 
     if (!user_name || !email || !password || !fullname) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields'
-      });
+      return res.error('Missing required fields', 400);
     }
 
     const user = await createUserService({ user_name, email, password, fullname });
@@ -51,8 +48,9 @@ async function createUserController(req, res, next) {
 
       // Register the new session ID so it can be invalidated later if needed
       sessionManager.addSessionForUser(user.user_id, req.sessionID);
+      // Note: res.success uses 200, but 201 is more appropriate for creation
       return res.status(201).json({
-        success: true,
+        status: 'success',
         message: 'User created successfully',
         data: safeUser,
       });
@@ -72,10 +70,7 @@ async function createUserController(req, res, next) {
     const status = statusMap[error.message] || 500;
 
     if (status !== 500) {
-      return res.status(status).json({
-        success: false,
-        message: error.message
-      });
+      return res.error(error.message, status);
     }
 
     next(error);
@@ -89,10 +84,7 @@ async function updateUserController(req, res, next) {
 
     // Validate user_id
     if (!user_id || !uuidValidate(user_id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid user ID format (must be a valid UUID)',
-      });
+      return res.error('Invalid user ID format (must be a valid UUID)', 400);
     }
 
     const user = await updateUserService(user_id, updateFields);
@@ -101,11 +93,7 @@ async function updateUserController(req, res, next) {
     const { password_hash, ...safeUser } =
       user.toJSON ? user.toJSON() : user;
 
-    return res.status(200).json({
-      success: true,
-      message: 'User updated successfully',
-      data: safeUser,
-    });
+    return res.success('User updated successfully', safeUser);
 
   } catch (error) {
     const statusMap = {
@@ -125,10 +113,7 @@ async function updateUserController(req, res, next) {
     const status = statusMap[error.message] || 500;
 
     if (status !== 500) {
-      return res.status(status).json({
-        success: false,
-        message: error.message,
-      });
+      return res.error(error.message, status);
     }
 
     next(error);
@@ -144,7 +129,7 @@ async function viewUserController(req, res, next) {
     // Sanitize response
     const { password_hash, ...safeUser } = user.toJSON ? user.toJSON() : user;
 
-    return res.status(200).json({ success: true, message: 'User found', data: safeUser });
+    return res.success('User found', safeUser);
   } catch (error) {
     const statusMap = {
       'Missing user ID': 400,
@@ -153,7 +138,7 @@ async function viewUserController(req, res, next) {
 
     const status = statusMap[error.message] || 500;
     if (status !== 500) {
-      return res.status(status).json({ success: false, message: error.message });
+      return res.error(error.message, status);
     }
     next(error);
   }
@@ -163,7 +148,7 @@ async function viewUserController(req, res, next) {
 async function deleteAccountController(req, res, next) {
   try {
     const actor = req.session?.user;
-    if (!actor) return res.status(401).json({ success: false, message: 'Unauthenticated' });
+    if (!actor) return res.error('Unauthenticated', 401);
 
     const userId = actor.user_id;
 
@@ -172,10 +157,10 @@ async function deleteAccountController(req, res, next) {
       await deleteUserService(userId, actor); // Pass session data to avoid unnecessary DB query
     } catch (err) {
       if (err && (err.code === 'SOLE_ADMIN' || err.message === 'Sole admin')) {
-        return res.status(400).json({
-          success: false,
-          message: 'Cannot delete account: you are the only ADMIN in the organization. Invite another ADMIN or assign the ADMIN role to another user before deleting your account.'
-        });
+        return res.error(
+          'Cannot delete account: you are the only ADMIN in the organization. Invite another ADMIN or assign the ADMIN role to another user before deleting your account.',
+          400
+        );
       }
       throw err;
     }
@@ -192,10 +177,10 @@ async function deleteAccountController(req, res, next) {
     if (req.session) {
       req.session.destroy((err) => {
         // ignore destroy errors, still return success
-        return res.status(200).json({ success: true, message: 'Account deleted successfully' });
+        return res.success('Account deleted successfully', { user_id: userId });
       });
     } else {
-      return res.status(200).json({ success: true, message: 'Account deleted successfully' });
+      return res.success('Account deleted successfully', { user_id: userId });
     }
   } catch (error) {
     next(error);

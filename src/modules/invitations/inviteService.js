@@ -177,6 +177,12 @@ async function revokeInvitation({ invite_id, revoked_by }) {
 // Business logic for inviting a user
 async function inviteUserService({ email, role_name, org_id, invited_by_user_id, inviter_role_name }) {
   // Validate required fields
+  if (!email) {
+    throw new Error('Email is required');
+  }
+  if (!role_name) {
+    throw new Error('Role name is required');
+  }
   if (!org_id) {
     throw new Error('User must belong to an organization to invite others');
   }

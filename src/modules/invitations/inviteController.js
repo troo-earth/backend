@@ -6,6 +6,7 @@ const {
   removeMemberService,
   changeUserRoleService
 } = require('../invitations/inviteService');
+const { withLogging } = require('../../utils/logger');
 
 async function inviteUserController(req, res, next) {
   try {
@@ -13,21 +14,20 @@ async function inviteUserController(req, res, next) {
     if (!inviter) return res.error('Unauthenticated', 401);
 
     const { email, role_name } = req.body || {};
-    const org_id = inviter.org_id;
 
-    if (!email || !role_name) return res.error('Missing fields', 400);
-
-    // Use service layer for business logic
+    // Use service layer for business logic (including field validation)
     const { invitation } = await inviteUserService({
       email,
       role_name,
-      org_id,
+      org_id: inviter.org_id,
       invited_by_user_id: inviter.user_id,
       inviter_role_name: inviter.role_name
     });
 
   return res.success('Invitation sent', { invitation_id: invitation.invite_id });
   } catch (err) {
+    if (err.message === 'Email is required') return res.error(err.message, 400);
+    if (err.message === 'Role name is required') return res.error(err.message, 400);
     if (err.message === 'Unknown role') return res.error(err.message, 400);
     if (err.message === 'Failed to create invitation') return res.error(err.message, 500);
     if (err.message === 'Managers may only invite VIEWERs') return res.error(err.message, 403);
@@ -170,10 +170,10 @@ async function revokePermissionsController(req, res, next) {
 }
 
 module.exports = {
-  inviteUserController,
-  joinOrganizationController,
-  revokeInviteController,
-  listMembersController,
-  removeMemberController,
-  revokePermissionsController,
+  inviteUserController: withLogging(inviteUserController, 'inviteUserController'),
+  joinOrganizationController: withLogging(joinOrganizationController, 'joinOrganizationController'),
+  revokeInviteController: withLogging(revokeInviteController, 'revokeInviteController'),
+  listMembersController: withLogging(listMembersController, 'listMembersController'),
+  removeMemberController: withLogging(removeMemberController, 'removeMemberController'),
+  revokePermissionsController: withLogging(revokePermissionsController, 'revokePermissionsController'),
 };

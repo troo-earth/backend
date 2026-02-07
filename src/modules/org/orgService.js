@@ -55,24 +55,18 @@ async function createOrgService(payload, sessionUser) {
     { where: { user_id: sessionUser.user_id } }
   );
 
-  // 3️⃣ Assign ADMIN role to creator (if Roles table has ADMIN)
-  try {
-    const adminRole = await Role.findOne({
-      where: { role_name: 'ADMIN' }
-    });
+  // 3️⃣ Assign ADMIN role to creator
+  const adminRole = await Role.findOne({
+    where: { role_name: 'ADMIN' }
+  });
 
-    if (adminRole) {
-      await User.update(
-        { role_id: adminRole.role_id }, // Only set role_id, not role_name
-        { where: { user_id: sessionUser.user_id } }
-      );
-      
-      // Invalidate permissions cache for the ADMIN role
-      invalidatePermissionsCache(adminRole.role_id);
-    }
-  } catch (err) {
-    console.error('Failed to auto-assign ADMIN role to org creator', err.message || err);
-  }
+  await User.update(
+    { role_id: adminRole.role_id },
+    { where: { user_id: sessionUser.user_id } }
+  );
+  
+  // Invalidate permissions cache for the ADMIN role
+  await invalidatePermissionsCache(adminRole.role_id);
 
   return org;
 }

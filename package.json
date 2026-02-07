@@ -4,8 +4,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "seed:rbac": "node scripts/seed-rbac.js"
+    "dev": "nodemon src/server.js"
   },
   "keywords": [],
   "author": "",

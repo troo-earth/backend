@@ -2,8 +2,7 @@ const { createUserService, updateUserService, viewUserService, deleteUserService
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
 const sessionManager = require('../../utils/sessionManager');
-const User = require('./userModel');
-const { Role } = require('../../models/associations');
+const { getRoleName } = require('../../middleware/rbacMiddleware');
 
 async function createUserController(req, res, next) {
   try {
@@ -18,20 +17,8 @@ async function createUserController(req, res, next) {
     const { password_hash, ...safeUser } =
       user.toJSON ? user.toJSON() : user;
 
-    // Fetch role_name from Roles table using role_id (like login does)
-    let role_name = null;
-    if (user.role_id) {
-      try {
-        const role = await Role.findByPk(user.role_id, {
-          attributes: ['role_name']
-        });
-        if (role && role.role_name) {
-          role_name = role.role_name;
-        }
-      } catch (e) {
-        console.error('Error fetching role details during user creation', e && e.message ? e.message : e);
-      }
-    }
+    // Get role_name from cache (like login does)
+    const role_name = await getRoleName(user.role_id);
 
     // 🔒 Rotate session + respond ONLY inside callback
     req.session.regenerate((err) => {
@@ -48,12 +35,7 @@ async function createUserController(req, res, next) {
 
       // Register the new session ID so it can be invalidated later if needed
       sessionManager.addSessionForUser(user.user_id, req.sessionID);
-      // Note: res.success uses 200, but 201 is more appropriate for creation
-      return res.status(201).json({
-        status: 'success',
-        message: 'User created successfully',
-        data: safeUser,
-      });
+      return res.success('User created successfully', safeUser);
     });
 
   } catch (error) {
@@ -87,6 +69,15 @@ async function updateUserController(req, res, next) {
       return res.error('Invalid user ID format (must be a valid UUID)', 400);
     }
 
+    // Validate org_id and role_id formats if provided
+    if (updateFields.org_id && !uuidValidate(updateFields.org_id)) {
+      return res.error('Invalid org_id format', 400);
+    }
+
+    if (updateFields.role_id && !uuidValidate(updateFields.role_id)) {
+      return res.error('Invalid role_id format', 400);
+    }
+
     const user = await updateUserService(user_id, updateFields);
 
     // Sanitize response
@@ -102,7 +93,6 @@ async function updateUserController(req, res, next) {
       'No valid update fields provided': 400,
       'Invalid email format': 400,
       'Invalid password format': 400,
-      'Invalid org_id': 400,              // ✅ NEW
       'Email already registered': 409,
       'Username already registered': 409,
       'Full name must be a non-empty string': 400,

@@ -1,8 +1,9 @@
 const { Role, Permission } = require('../models/associations');
 const redisClient = require('../config/redis');
 
-// Redis cache key prefix for role permissions
-const CACHE_KEY_PREFIX = 'rbac:permissions:';
+// Redis cache key prefixes
+const PERMISSIONS_CACHE_PREFIX = 'rbac:permissions:';
+const ROLE_NAME_CACHE_PREFIX = 'rbac:role_name:';
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 
 /**
@@ -11,7 +12,7 @@ const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
  * @returns {Promise<Set>} - Set of permission keys
  */
 async function getRolePermissions(roleId) {
-  const cacheKey = `${CACHE_KEY_PREFIX}${roleId}`;
+  const cacheKey = `${PERMISSIONS_CACHE_PREFIX}${roleId}`;
   
   try {
     // Try to get from Redis cache first
@@ -70,12 +71,12 @@ async function getRolePermissions(roleId) {
 async function invalidatePermissionsCache(roleId = null) {
   try {
     if (roleId) {
-      const cacheKey = `${CACHE_KEY_PREFIX}${roleId}`;
+      const cacheKey = `${PERMISSIONS_CACHE_PREFIX}${roleId}`;
       await redisClient.del(cacheKey);
       console.log(`Invalidated permissions cache for role: ${roleId}`);
     } else {
       // Delete all keys matching the prefix pattern
-      const keys = await redisClient.keys(`${CACHE_KEY_PREFIX}*`);
+      const keys = await redisClient.keys(`${PERMISSIONS_CACHE_PREFIX}*`);
       if (keys.length > 0) {
         await redisClient.del(keys);
       }
@@ -84,6 +85,50 @@ async function invalidatePermissionsCache(roleId = null) {
   } catch (error) {
     console.error('Error invalidating permissions cache:', error.message);
     // Don't throw - cache invalidation failure shouldn't break the app
+  }
+}
+
+/**
+ * Get role name from cache or database
+ * @param {string} roleId - The role ID
+ * @returns {Promise<string|null>} - The role name or null
+ */
+async function getRoleName(roleId) {
+  if (!roleId) return null;
+  
+  const cacheKey = `${ROLE_NAME_CACHE_PREFIX}${roleId}`;
+  
+  try {
+    const cached = await redisClient.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  } catch (cacheError) {
+    console.error('Redis cache read error (role name):', cacheError.message);
+  }
+
+  try {
+    const role = await Role.findByPk(roleId, {
+      attributes: ['role_name']
+    });
+
+    if (!role) {
+      return null;
+    }
+
+    const roleName = role.role_name;
+    
+    // Cache the result
+    try {
+      await redisClient.setEx(cacheKey, CACHE_TTL_SECONDS, roleName);
+    } catch (cacheError) {
+      console.error('Redis cache write error (role name):', cacheError.message);
+    }
+
+    return roleName;
+  } catch (error) {
+    console.error('Error fetching role name:', error.message);
+    return null;
   }
 }
 
@@ -121,5 +166,6 @@ function requirePermission(permissionKey) {
 module.exports = { 
   requirePermission, 
   invalidatePermissionsCache,
-  getRolePermissions // Export for testing or manual cache warming
+  getRolePermissions,
+  getRoleName
 };

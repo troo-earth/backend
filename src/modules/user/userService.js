@@ -26,15 +26,6 @@ async function createUserService({ user_name, email, password, fullname, org_id,
     throw new Error('Full name is required and must be a non-empty string');
   }
 
-  // Validate optional UUID fields
-  if (org_id && !isValidUUID(org_id)) {
-    throw new Error('Invalid org_id format');
-  }
-
-  if (role_id && !isValidUUID(role_id)) {
-    throw new Error('Invalid role_id format');
-  }
-
   // Check for invalid characters in fullname (letters, spaces, hyphens, apostrophes only)
   const nameRegex = /^[A-Za-z\s\-']+$/;
   if (!nameRegex.test(fullname.trim())) {
@@ -153,15 +144,9 @@ async function updateUserService(user_id, updateFields) {
     updateFields.user_name = updateFields.user_name.trim();
   }
 
-  // --- org_id (NEW) ---
-  if (updateFields.org_id !== undefined) {
-    if (updateFields.org_id === null) {
-      updateFields.org_id = null; // allow unassign
-    } else {
-      if (!isValidUUID(updateFields.org_id)) {
-        throw new Error('Invalid org_id');
-      }
-    }
+  // --- org_id ---
+  if (updateFields.org_id !== undefined && updateFields.org_id === null) {
+    updateFields.org_id = null; // allow unassign
   }
 
   // --- Update ---

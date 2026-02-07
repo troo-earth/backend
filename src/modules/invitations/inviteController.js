@@ -10,8 +10,7 @@ const { withLogging } = require('../../utils/logger');
 
 async function inviteUserController(req, res, next) {
   try {
-    const inviter = req.session?.user;
-    if (!inviter) return res.error('Unauthenticated', 401);
+    const inviter = req.session.user;
 
     const { email, role_name } = req.body || {};
 
@@ -87,8 +86,7 @@ async function joinOrganizationController(req, res, next) {
 // Revoke an existing invitation (admins can revoke any; managers only their own)
 async function revokeInviteController(req, res, next) {
   try {
-    const actor = req.session?.user;
-    if (!actor) return res.error('Unauthenticated', 401);
+    const actor = req.session.user;
 
     const { invite_id } = req.body || {};
     if (!invite_id) return res.error('Missing invite_id', 400);
@@ -107,8 +105,7 @@ async function revokeInviteController(req, res, next) {
 // List members of the actor's org (ADMIN can view)
 async function listMembersController(req, res, next) {
   try {
-    const actor = req.session?.user;
-    if (!actor) return res.error('Unauthenticated', 401);
+    const actor = req.session.user;
 
     const org_id = actor.org_id;
     if (!org_id) return res.error('User is not associated with any organization', 403);
@@ -124,8 +121,7 @@ async function listMembersController(req, res, next) {
 // Remove a member from the organization
 async function removeMemberController(req, res, next) {
   try {
-    const actor = req.session?.user;
-    if (!actor) return res.error('Unauthenticated', 401);
+    const actor = req.session.user;
 
     const { id: targetUserId } = req.params || {};
     if (!targetUserId) return res.error('Missing user id', 400);
@@ -145,8 +141,7 @@ async function removeMemberController(req, res, next) {
 // Authorization: ADMIN can set any role; MANAGER may only set VIEWER.
 async function revokePermissionsController(req, res, next) {
   try {
-    const actor = req.session?.user;
-    if (!actor) return res.error('Unauthenticated', 401);
+    const actor = req.session.user;
 
     const { user_id: targetUserId, role_name: requestedRoleName } = req.body || {};
     if (!targetUserId) return res.error('Missing user_id', 400);

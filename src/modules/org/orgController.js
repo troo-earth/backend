@@ -7,31 +7,32 @@ const { withLogging } = require('../../utils/logger');
 
 async function createOrgController(req, res, next) {
   try {
-    if (!req.session?.user?.user_id) {
-      return res.error('Unauthenticated', 401);
+    const { org_name, country_code } = req.body;
+
+    if (!org_name || !country_code) {
+      return res.error('org_name and country_code are required', 400);
     }
 
-    const org = await createOrgService(req.body, req.session.user);
+    const actor = req.session.user;
 
-    // ✅ update session immediately
-    req.session.user.org_id = org.org_id;
+    const org = await createOrgService(req.body, actor.user_id);
 
-    return res.success(
-      'Organization created successfully',
-      org
-    );
+    // Regenerate session because role privilege changed
+    req.session.regenerate((err) => {
+      if (err) return next(err);
+
+      req.session.user = {
+        user_id: actor.user_id,
+        fullname: actor.fullname,
+        email: actor.email,
+        org_id: org.org_id,
+        role: 'superadmin',
+      };
+
+      return res.success('Organization created successfully', org);
+    });
 
   } catch (error) {
-    const statusMap = {
-      'org_name and country_code are required': 400,
-      'Unauthenticated': 401,
-    };
-
-    const status = statusMap[error.message];
-    if (status) {
-      return res.error(error.message, status);
-    }
-
     next(error);
   }
 }
@@ -67,7 +68,6 @@ async function getOrgByIdController(req, res, next) {
     next(error);
   }
 }
-
 
 async function updateOrgController(req, res, next) {
   try {

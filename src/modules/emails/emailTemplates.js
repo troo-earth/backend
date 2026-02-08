@@ -1,7 +1,7 @@
 const { emailLayout } = require('./emailLayout');
 
 function accountCreatedTemplate({ user_name }) {
-  const dashboardUrl = "https://dev.troo.earth/"; // Replace with your actual URL
+  const dashboardUrl = "https://troo.earth/"; // Replace with your actual URL
 
   const content = `
     <h1>Welcome to the Movement, ${user_name}!</h1>
@@ -24,14 +24,8 @@ function accountCreatedTemplate({ user_name }) {
   return emailLayout(content);
 }
 
-/**
- * Account Updated Email
- * - Clear notification of changes
- * - Security focus (If you didn't do this...)
- * - "View Account" button for quick verification
- */
 function accountUpdatedTemplate({ user_name }) {
-  const accountUrl = "https://dev.troo.earth/"; // Replace with your actual URL
+  const accountUrl = "https://troo.earth/"; // Replace with your actual URL
 
   const content = `
     <h1>Account Details Successfully Updated</h1>
@@ -53,4 +47,26 @@ function accountUpdatedTemplate({ user_name }) {
   return emailLayout(content);
 }
 
-module.exports = { accountCreatedTemplate, accountUpdatedTemplate };
+function invitationTemplate({ invite_link, org_name, role }) {
+
+  const content = `
+    <h1>You’ve Been Invited to Join ${org_name}</h1>
+
+    <p>You have been invited to join your organization on <strong>troo.earth</strong> as a <strong>${role}</strong>.</p>
+
+    <p>Click the button below to accept your invitation and get started:</p>
+
+    <center>
+      <a href="${invite_link}" class="troo-button">Accept Invitation</a>
+    </center>
+
+    <p style="margin-top:20px;font-size:14px;color:#666;">
+      This invitation link will expire in 7 days. If you were not expecting this invitation, you can safely ignore this email.
+    </p>
+
+    <p>— The troo.earth Team</p>
+  `;
+
+  return emailLayout(content);
+}
+module.exports = { accountCreatedTemplate, accountUpdatedTemplate, invitationTemplate };

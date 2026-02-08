@@ -5,6 +5,8 @@ const bcrypt = require('bcrypt');
 const { Op } = require('sequelize');
 const { sendEmail } = require('../emails/emailService');
 const { accountCreatedTemplate, accountUpdatedTemplate } = require('../emails/emailTemplates');
+const { validateRoleAssignment } = require('./policies/roleGovernance');
+const { destroyUserSessions } = require('../auth/policies/sessionInvalidation');
 
 async function createUserService({ user_name, email, password, fullname }) {
   // Validate and sanitize inputs
@@ -179,8 +181,42 @@ async function viewUserService(user_id) {
   return user;
 }
 
+const updateUserRoleService = async ({
+  actorUserId,
+  actorRole,
+  targetUserId,
+  newRole,
+  org_id,
+}) => {
+
+  const targetUser = await User.findByPk(targetUserId);
+
+  if (!targetUser) {
+    throw new Error('User not found');
+  }
+
+  // Governance validation
+  await validateRoleAssignment({
+    actorRole,
+    targetRole: newRole,
+    targetUserId,
+    org_id,
+    actorUserId,
+  });
+
+  // Update role
+  targetUser.role = newRole;
+  await targetUser.save();
+
+  // Invalidate all sessions so new role applies immediately
+  await destroyUserSessions(targetUserId);
+
+  return targetUser;
+};
+
 module.exports = {
   createUserService: withLogging(createUserService, 'createUserService'),
   updateUserService: withLogging(updateUserService, 'updateUserService'),
   viewUserService: withLogging(viewUserService, 'viewUserService'),
+  updateUserRoleService: withLogging(updateUserRoleService, 'updateUserRoleService'),
 };

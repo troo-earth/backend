@@ -1,6 +1,7 @@
 const { createUserService, updateUserService, viewUserService, updateUserRoleService } = require('./userService');
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
+const redisClient = require('../../config/redis');
 
 async function createUserController(req, res, next) {
   try {

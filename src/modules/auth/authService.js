@@ -19,7 +19,7 @@ async function loginUserService({ email, password }) {
   if (!isPasswordValid) {
     throw new Error('Incorrect Password');
   }
-
+  
   return user;
 }
 

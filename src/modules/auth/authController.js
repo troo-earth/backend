@@ -1,5 +1,6 @@
 const { loginUserService, verifyUserService, logoutUserService } = require('./authService');
 const { withLogging } = require('../../utils/logger');
+const redisClient = require('../../config/redis');
 
 async function loginUserController(req, res, next) {
   try {

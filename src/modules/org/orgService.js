@@ -15,7 +15,7 @@ function generateOrgCode(org_name, org_id) {
   return `${prefix}-${suffix}`;
 }
 
-async function createOrgService(payload, sessionUser) {
+async function createOrgService(payload, user_id) {
   const {
     org_name,
     country_code,
@@ -24,22 +24,13 @@ async function createOrgService(payload, sessionUser) {
     incorporation_doc_url,
   } = payload;
 
-  if (!org_name || !country_code) {
-    throw new Error('org_name and country_code are required');
-  }
-
-  if (!sessionUser || !sessionUser.user_id) {
-    throw new Error('Unauthenticated');
-  }
-
-  // Generate org_id manually so we can derive org_code
   const org_id = uuidv4();
   const org_code = generateOrgCode(org_name, org_id);
 
-  // 1️⃣ Create org
+  // 1. Create organization
   const org = await Org.create({
     org_id,
-    org_code,               
+    org_code,
     org_name: org_name.trim(),
     country_code: country_code.toUpperCase(),
     registration_id,
@@ -47,10 +38,13 @@ async function createOrgService(payload, sessionUser) {
     incorporation_doc_url,
   });
 
-  // 2️⃣ Attach org to creator user
+  // 2. Update creator user → attach org + make SUPERADMIN
   await User.update(
-    { org_id: org.org_id },
-    { where: { user_id: sessionUser.user_id } }
+    {
+      org_id: org.org_id,
+      role: 'superadmin',
+    },
+    { where: { user_id } }
   );
 
   return org;

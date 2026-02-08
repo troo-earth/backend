@@ -69,7 +69,6 @@ async function getOrgByIdController(req, res, next) {
   }
 }
 
-
 async function updateOrgController(req, res, next) {
   try {
     const { id: org_id } = req.params;

@@ -13,7 +13,7 @@ const authorizePermission = (permission) => {
       }
 
       if (!allowedRoles.includes(userRole)) {
-        return res.error('Forbidden', 403);
+        return res.error('User is Forbidden from performing this action', 403);
       }
 
       next();

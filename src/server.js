@@ -13,6 +13,7 @@ const uploadRoutes = require('./modules/uploads/uploadRoutes');
 const transactionsRoutes = require('./modules/transactions/transactionsRoutes');
 const retirementRoutes = require('./modules/retirements/retirementRoutes');
 const listingEventsRoutes = require('./modules/listingEvents/listingEventsRoutes');
+const invitationRoutes = require('./modules/invitations/invitationRoutes');
 
 const errorHandler = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
@@ -97,6 +98,7 @@ app.use(authMiddelware);
 
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/marketplace', marketplaceRoutes);
+app.use('/api/v1/invitations', invitationRoutes);
 app.use('/api/v1/listings', listingRoutes);
 app.use('/api/v1/holdings', holdingsRoutes);
 app.use('/api/v1/uploads', uploadRoutes);

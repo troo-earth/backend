@@ -10,35 +10,29 @@ const validateRoleAssignment = async ({
   actorUserId,
 }) => {
 
-  // 1. Admin cannot assign admin or superadmin
-  if (actorRole === ROLES.ADMIN) {
-    if (targetRole === ROLES.ADMIN || targetRole === ROLES.SUPERADMIN) {
-      throw new Error('Admins cannot assign admin or superadmin roles');
-    }
-  }
-
-  // 2. Only superadmin can manage admins
+  // 1. Only superadmins can assign admin or superadmin roles
   if (
     (targetRole === ROLES.ADMIN || targetRole === ROLES.SUPERADMIN) &&
     actorRole !== ROLES.SUPERADMIN
   ) {
-    throw new Error('Only superadmin can assign admin roles');
+    throw new Error('Only superadmins can assign admin or superadmin roles');
   }
 
-  // 3. Prevent cross-org role modification
+  // 2. Existing-user-specific checks
   if (targetUserId) {
+
     const targetUser = await User.findByPk(targetUserId);
 
     if (!targetUser) {
       throw new Error('Target user not found');
     }
 
-    // Ensure actor and target belong to same org
+    // Prevent cross-org role modification
     if (targetUser.org_id !== org_id) {
       throw new Error('Cannot modify users outside your organization');
     }
 
-    // Existing: Prevent last superadmin downgrade/remove
+    // 3. Prevent last superadmin downgrade/remove
     if (
       targetUser.role === ROLES.SUPERADMIN &&
       targetRole !== ROLES.SUPERADMIN
@@ -56,12 +50,15 @@ const validateRoleAssignment = async ({
     }
   }
 
-  // 4. Prevent self role escalation/demotion edge cases
+  // 4. Prevent self role modification (except superadmin)
   if (actorUserId === targetUserId && actorRole !== ROLES.SUPERADMIN) {
     throw new Error('Users cannot modify their own role');
   }
 };
 
 module.exports = {
-  validateRoleAssignment: withLogging(validateRoleAssignment, 'validateRoleAssignment'),
+  validateRoleAssignment: withLogging(
+    validateRoleAssignment,
+    'validateRoleAssignment'
+  ),
 };

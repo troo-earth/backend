@@ -63,7 +63,10 @@ async function getOrgByIdService(org_id) {
       'fullname',
       'email',
       'user_name',
+      'role',
+      'createdAt'
     ],
+    order: [['createdAt', 'ASC']],
   });
 
   return {

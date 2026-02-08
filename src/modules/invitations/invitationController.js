@@ -1,4 +1,4 @@
-const { sendInviteService, acceptInvitationService, revokeInvitationService } = require('./invitationService');
+const { sendInviteService, acceptInvitationService, revokeInvitationService, listOrgInvitationsService, resendInvitationService, checkInvitationTokenService } = require('./invitationService');
 const { withLogging } = require('../../utils/logger');
 
 const sendInviteController = async (req, res, next) => {
@@ -49,30 +49,88 @@ const acceptInvitationController = async (req, res, next) => {
 };
 
 const revokeInvitationController = async (req, res, next) => {
-  try {
-    const { email } = req.body;
+    try {
+        const { email } = req.body;
 
-    if (!email) {
-      return res.error('Email is required', 400);
+        if (!email) {
+            return res.error('Email is required', 400);
+        }
+
+        const actor = req.session.user;
+
+        const invitation = await revokeInvitationService({
+            email,
+            org_id: actor.org_id,
+        });
+
+        return res.success('Invitation revoked successfully', invitation);
+
+    } catch (err) {
+        return res.error(err.message, 400);
+    }
+};
+
+const listOrgInvitationsController = async (req, res, next) => {
+    try {
+        const actor = req.session.user;
+
+        const { status } = req.query;
+
+        const invitations = await listOrgInvitationsService({
+            org_id: actor.org_id,
+            status,
+        });
+
+        return res.success(
+            'Invitations fetched successfully',
+            invitations
+        );
+
+    } catch (err) {
+        return res.error(err.message || 'Failed to fetch invitations', 400);
+    }
+};
+
+const resendInvitationController = async (req, res, next) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.error('Email is required', 400);
+
+        const actor = req.session.user;
+        const invitation = await resendInvitationService({
+            email,
+            org_id: actor.org_id,
+        });
+
+        return res.success('Invitation resent successfully', invitation);
+
+    } catch (err) {
+        return res.error(err.message, 400);
+    }
+};
+
+const checkInvitationTokenController = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.error('token is required', 400);
     }
 
-    const actor = req.session.user;
+    const result = await checkInvitationTokenService({ token });
 
-    const invitation = await revokeInvitationService({
-      email,
-      org_id: actor.org_id,
-    });
-
-    return res.success('Invitation revoked successfully', invitation);
+    return res.success('Invitation token verified', result);
 
   } catch (err) {
     return res.error(err.message, 400);
   }
 };
 
-
 module.exports = {
     sendInviteController: withLogging(sendInviteController, 'sendInviteController'),
     acceptInvitationController: withLogging(acceptInvitationController, 'acceptInvitationController'),
     revokeInvitationController: withLogging(revokeInvitationController, 'revokeInvitationController'),
+    listOrgInvitationsController: withLogging(listOrgInvitationsController, 'listOrgInvitationsController'),
+    resendInvitationController: withLogging(resendInvitationController, 'resendInvitationController'),
+    checkInvitationTokenController: withLogging(checkInvitationTokenController, 'checkInvitationTokenController'),
 };

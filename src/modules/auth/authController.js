@@ -37,13 +37,9 @@ async function loginUserController(req, res, next) {
 
   } catch (error) {
     // Specific handling for authentication errors
-    if (error.message === 'Email and password are required' ||
-      error.message === 'Invalid email or password') {
-      return res.error('Invalid email or password', 401);
+    if (error.message === 'Email and password are required' || error.message === 'Invalid Email' || error.message === 'Incorrect Password') {
+      return res.error(error.message, 401);
     }
-
-    // Log unexpected errors and pass to error handler
-    console.error('Login error:', error);
     next(error);
   }
 }

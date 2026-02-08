@@ -1,12 +1,12 @@
 const { DataTypes } = require('sequelize');
-const sequelize = require('../../config/database'); 
+const sequelize = require('../../config/database');
 
 const User = sequelize.define('User', {
   user_id: {
-  type: DataTypes.UUID,
-  defaultValue: DataTypes.UUIDV4, 
-  primaryKey: true,
-},
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
   fullname: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -28,6 +28,17 @@ const User = sequelize.define('User', {
     type: DataTypes.UUID,
     allowNull: true,
   },
+  role: {
+    type: DataTypes.ENUM(
+      'superadmin',
+      'admin',
+      'manager',
+      'viewer'
+    ),
+    allowNull: false,
+    defaultValue: 'viewer',
+  },
+
 }, {
   tableName: 'Users',
   timestamps: true,

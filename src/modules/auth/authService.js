@@ -11,13 +11,13 @@ async function loginUserService({ email, password }) {
   const user = await User.findOne({ where: { email } });
 
   if (!user || !user.password_hash) {
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid Email');
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
   if (!isPasswordValid) {
-    throw new Error('Invalid email or password');
+    throw new Error('Incorrect Password');
   }
 
   return user;

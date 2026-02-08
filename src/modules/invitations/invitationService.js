@@ -51,7 +51,7 @@ const sendInviteService = async ({
   });
 
   // Invite link (frontend route)
-  const inviteLink = `${process.env.FRONTEND_URL}/accept-invite?token=${invite_token}`;
+  const inviteLink = `atlas.troo.earth/accept-invite?token=${invite_token}`;
 
   const org = await Org.findByPk(org_id);
 
@@ -186,7 +186,7 @@ const resendInvitationService = async ({ email, org_id }) => {
 
   await invitation.save();
 
-  const inviteLink = `${process.env.FRONTEND_URL}/accept-invite?token=${invite_token}`;
+  const inviteLink = `atlas.troo.earth/accept-invite?token=${invite_token}`;
    const org = await Org.findByPk(org_id);
   const org_name = org ? org.org_name : 'your organization';
   const html = invitationTemplate({

@@ -1,4 +1,4 @@
-const { createUserService, updateUserService, viewUserService } = require('./userService');
+const { createUserService, updateUserService, viewUserService, updateUserRoleService } = require('./userService');
 const { withLogging } = require('../../utils/logger');
 const { validate: uuidValidate } = require('uuid');
 
@@ -7,34 +7,40 @@ async function createUserController(req, res, next) {
     const { user_name, email, password, fullname } = req.body || {};
 
     if (!user_name || !email || !password || !fullname) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields'
-      });
+      return res.error('Missing required fields', 400);
     }
 
-    const user = await createUserService({ user_name, email, password, fullname });
+    const user = await createUserService({
+      user_name,
+      email,
+      password,
+      fullname,
+    });
 
     const { password_hash, ...safeUser } =
       user.toJSON ? user.toJSON() : user;
 
-    // 🔒 Rotate session + respond ONLY inside callback
-    req.session.regenerate((err) => {
+    // Rotate session and set identity
+    req.session.regenerate(async (err) => {
       if (err) return next(err);
 
       req.session.user = {
         user_id: user.user_id,
         fullname: user.fullname,
         email: user.email,
-        role: user.role,        
-        org_id: user.org_id
+        role: user.role,
+        org_id: user.org_id,
       };
 
-      return res.status(201).json({
-        success: true,
-        message: 'User created successfully',
-        data: safeUser,
-      });
+      // Track session in Redis
+      await redisClient.sAdd(
+        `user_sessions:${user.user_id}`,
+        req.sessionID
+      );
+
+      return res.success('User created successfully', {
+        user: safeUser,
+      }, 201);
     });
 
   } catch (error) {
@@ -51,15 +57,13 @@ async function createUserController(req, res, next) {
     const status = statusMap[error.message] || 500;
 
     if (status !== 500) {
-      return res.status(status).json({
-        success: false,
-        message: error.message
-      });
+      return res.error(error.message, status);
     }
 
     next(error);
   }
 }
+
 
 async function updateUserController(req, res, next) {
   try {
@@ -138,8 +142,36 @@ async function viewUserController(req, res, next) {
   }
 }
 
+const updateUserRoleController = async (req, res, next) => {
+  try {
+    const { user_id, role } = req.body;
+
+    if (!user_id || !role) {
+      return res.error('user_id and role are required', 400);
+    }
+
+    const actor = req.session.user;
+
+    const updatedUser = await updateUserRoleService({
+      actorUserId: actor.user_id,
+      actorRole: actor.role,
+      targetUserId: user_id,
+      newRole: role,
+      org_id: actor.org_id,
+    });
+
+    return res.success('User role updated successfully', {
+      user: updatedUser,
+    });
+
+  } catch (error) {
+    return res.error(error.message || 'Failed to update role', 400);
+  }
+};
+
 module.exports = {
   createUserController: withLogging(createUserController, 'createUserController'),
   updateUserController: withLogging(updateUserController, 'updateUserController'),
   viewUserController: withLogging(viewUserController, 'viewUserController'),
+  updateUserRoleController: withLogging(updateUserRoleController, 'updateUserRoleController'),
 };

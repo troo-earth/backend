@@ -12,18 +12,22 @@ async function loginUserController(req, res, next) {
     // Call the service to authenticate and get the user
     const user = await loginUserService({ email, password });
 
-    // IMPORTANT: rotate session ID
-    req.session.regenerate((err) => {
+    req.session.regenerate(async (err) => {
       if (err) return next(err);
 
-      // Attach identity to session
       req.session.user = {
         user_id: user.user_id,
         fullname: user.fullname,
         email: user.email,
-        role: user.role,        
-        org_id: user.org_id    
+        role: user.role,
+        org_id: user.org_id
       };
+
+      // Track session AFTER regenerate
+      await redisClient.sAdd(
+        `user_sessions:${user.user_id}`,
+        req.sessionID
+      );
 
       return res.success('Login successful', {
         user: req.session.user
@@ -58,11 +62,20 @@ async function verifyUserController(req, res, next) {
 }
 
 async function logoutUserController(req, res, next) {
-
-  await logoutUserService(); // currently a no-op, but keeps symmetry
   try {
     if (!req.session) {
-      return res.success('Logged out');
+      return res.success('Logged out successfully');
+    }
+
+    const userId = req.session?.user?.user_id;
+    const sessionId = req.sessionID;
+
+    // Remove this session from Redis user session index
+    if (userId && sessionId) {
+      await redisClient.sRem(
+        `user_sessions:${userId}`,
+        sessionId
+      );
     }
 
     req.session.destroy((err) => {
@@ -84,7 +97,6 @@ async function logoutUserController(req, res, next) {
     next(error);
   }
 }
-
 
 module.exports = {
   loginUserController: withLogging(loginUserController, 'loginUserController'),

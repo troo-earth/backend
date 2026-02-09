@@ -37,9 +37,13 @@ app.post(
   buildStripeWebhookExpressHandler()
 );
 
-app.use((req, res, next) => {
-  markRequest(req, res); 
-  next();
+app.use((err, req, res, next) => {
+  if (res.statusCode === 500) {
+    markRequest(req, res, err); 
+  } else {
+    markRequest(req, res); 
+  }
+  next(err);
 });
 
 // Middleware (same as before)

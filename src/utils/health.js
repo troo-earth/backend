@@ -8,7 +8,7 @@ const redisClient = require('../config/redis');
 const router = express.Router();
 
 /* -------------------------------
-   GLOBAL PERMANENT REDIS KEYS
+    GLOBAL PERMANENT REDIS KEYS
 -------------------------------- */
 const K_REQ_TOTAL = 'health:global:req_total';
 const K_REQ_ERRORS = 'health:global:req_errors';
@@ -16,11 +16,13 @@ const K_RES_TIME = 'health:global:res_time_total';
 const K_RES_COUNT = 'health:global:res_count';
 const K_START_TIME = 'health:global:start_time';
 const K_LAST_REQ = 'health:global:last_request';
+const K_ERROR_LOG = 'health:global:error_log'; // New key for error list
 
-/* -------------------------------
-   Request tracker & Metrics (Redis)
--------------------------------- */
-function markRequest(req, res) {
+/**
+ * Middleware/Helper to log requests and errors
+ * Note: For 500 errors, you should call this or have a global error handler call it.
+ */
+function markRequest(req, res, error = null) {
   const path = req.originalUrl || req.path;
   if (path === '/' || path.startsWith('/health') || path.includes('favicon')) return;
 
@@ -35,36 +37,49 @@ function markRequest(req, res) {
   redisClient.set(K_LAST_REQ, lastReqData).catch(() => { });
   redisClient.incr(K_REQ_TOTAL).catch(() => { });
 
+  // Log specific Error if provided (for manual 500 logging)
+  if (error) {
+    const errorData = JSON.stringify({
+      time: new Date(),
+      path,
+      method: req.method,
+      message: error.message,
+      stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack trace'
+    });
+    redisClient.lPush(K_ERROR_LOG, errorData).then(() => {
+      redisClient.lTrim(K_ERROR_LOG, 0, 49); // Keep last 50 errors
+    }).catch(() => { });
+  }
+
   if (res && typeof res.on === 'function') {
     res.on('finish', () => {
       const diff = process.hrtime(start);
       const timeMs = (diff[0] * 1e9 + diff[1]) / 1e6;
       redisClient.incr(K_RES_COUNT).catch(() => { });
       redisClient.incrByFloat(K_RES_TIME, timeMs).catch(() => { });
+      
       if (res.statusCode >= 500) {
         redisClient.incr(K_REQ_ERRORS).catch(() => { });
+        // If we didn't pass an error object but got a 500, log the event
+        if (!error) {
+            const genericErr = JSON.stringify({ time: new Date(), path, method: req.method, message: `Status ${res.statusCode}` });
+            redisClient.lPush(K_ERROR_LOG, genericErr).then(() => redisClient.lTrim(K_ERROR_LOG, 0, 49)).catch(() => {});
+        }
       }
     });
   }
 }
 
-/* -------------------------------
-   ONE-TIME ADMIN RESET
-   URL: /reset?key=your_key
--------------------------------- */
 router.get('/reset', async (req, res) => {
   const secretKey = process.env.HEALTH_ADMIN_KEY;
-  if (req.query.key !== secretKey) return res.status(403).send('Unauthorized');
+  if (req.query.key !== secretKey) return res.error('Unauthorized', 403);
   try {
-    await redisClient.del([K_REQ_TOTAL, K_REQ_ERRORS, K_RES_TIME, K_RES_COUNT, K_START_TIME, K_LAST_REQ]);
+    await redisClient.del([K_REQ_TOTAL, K_REQ_ERRORS, K_RES_TIME, K_RES_COUNT, K_START_TIME, K_LAST_REQ, K_ERROR_LOG]);
     await redisClient.set(K_START_TIME, Date.now());
     res.send({ success: true, message: 'Stats reset successfully' });
   } catch (err) { res.status(500).send({ success: false, error: err.message }); }
 });
 
-/* -------------------------------
-   Health data collector
--------------------------------- */
 async function collectHealth() {
   let dbStatus = 'disconnected', dbPingMs = null;
   try {
@@ -100,7 +115,7 @@ async function collectHealth() {
     stats.lastRequest = lastReqStr ? JSON.parse(lastReqStr) : null;
   } catch { redisStatus = 'error'; stats.uptimeSeconds = Math.floor(process.uptime()); }
 
-  const frontendUrl = 'https://dev.troo.earth';
+  const frontendUrl = 'https://troo.earth';
   let fePing = null;
   try {
     const s = Date.now();
@@ -139,7 +154,7 @@ async function collectHealth() {
 }
 
 /* -------------------------------
-   UI Route
+    UI Route
 -------------------------------- */
 router.get('/', async (req, res) => {
   const health = await collectHealth();
@@ -192,27 +207,9 @@ router.get('/', async (req, res) => {
     .col:last-child { border-right: none; }
     
     .label { text-transform: uppercase; font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; margin-bottom: 25px; }
-/* Scaled metrics to prevent wrapping */
-.big { 
-  font-size: clamp(24px, 3.5vw, 42px); /* Dynamically shrinks based on container width */
-  font-weight: 900; 
-  color: var(--dark); 
-  line-height: 1; 
-  letter-spacing: -1.5px; 
-  margin-bottom: 10px;
-  white-space: nowrap; /* Forces text to stay on one line */
-}
+    .big { font-size: clamp(24px, 3.5vw, 42px); font-weight: 900; color: var(--dark); line-height: 1; letter-spacing: -1.5px; margin-bottom: 10px; white-space: nowrap; }
 
-/* Adjust row font slightly for dense data */
-.row { 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
-  padding: 8px 0; 
-  border-bottom: 1px solid rgba(0,0,0,0.03); 
-  font-size: 14px; /* Slightly smaller for better fit */
-  font-weight: 700; 
-}
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.03); font-size: 14px; font-weight: 700; }
     .row:last-child { border-bottom: none; }
 
     .pill { padding: 5px 12px; border-radius: 10px; font-size: 11px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
@@ -224,27 +221,56 @@ router.get('/', async (req, res) => {
 
     .footer-req { background: rgba(23, 62, 53, 0.03); padding: 18px 45px; display: flex; justify-content: space-between; font-family: monospace; font-size: 13px; font-weight: 700; border-top: 1px solid rgba(0,0,0,0.05); }
 
-    /* FIXED FOOTER PREVENTS JUMPING */
-    .footer-msg { 
-      margin-top: 30px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; 
-    }
+    .footer-msg { margin-top: 30px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     .flex-line { display: flex; align-items: center; gap: 15px; }
-    .btn-refresh { 
+    .btn-refresh, .btn-errors { 
       background: var(--teal); color: white; border: none; padding: 8px 20px; border-radius: 10px; 
-      cursor: pointer; font-weight: 900; font-size: 12px; transition: 0.2s; display: none;
+      cursor: pointer; font-weight: 900; font-size: 12px; transition: 0.2s; 
     }
+    .btn-refresh { display: none; }
+    .btn-errors { background: transparent; color: var(--muted); border: 1px solid rgba(0,0,0,0.1); }
     .btn-refresh:hover { background: var(--dark); transform: translateY(-1px); }
+    .btn-errors:hover { background: rgba(0,0,0,0.02); color: var(--dark); }
+
+    /* Modal Styling */
+    #error-modal { 
+        display: none; position: fixed; inset: 0; background: rgba(23, 62, 53, 0.4); 
+        backdrop-filter: blur(10px); z-index: 100; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-content { 
+        background: white; width: 100%; max-width: 700px; border-radius: 24px; padding: 40px; 
+        max-height: 80vh; overflow-y: auto; box-shadow: 0 40px 100px rgba(0,0,0,0.2); 
+    }
+    .error-item { border-bottom: 1px solid #f1f5f9; padding: 15px 0; font-size: 13px; }
+    .error-item:last-child { border-bottom: none; }
+    .err-meta { display: flex; gap: 10px; font-weight: 800; color: var(--teal); margin-bottom: 5px; text-transform: uppercase; font-size: 10px; }
+    .err-msg { font-weight: 700; color: #e11d48; margin-bottom: 5px; }
+    .err-stack { font-family: monospace; font-size: 11px; color: var(--muted); background: #f8fafc; padding: 10px; border-radius: 8px; white-space: pre-wrap; }
+
     .money-tag { font-size: 10px; font-weight: 800; opacity: 0.5; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; display: none; }
 
     @media (max-width: 900px) { 
       body { height: auto; overflow-y: auto; padding: 40px 0; }
+      .brand-logo { height: 32px; } /* Reduced logo size on mobile */
       .grid { grid-template-columns: 1fr; } .col { border-right: none; border-bottom: 1px solid rgba(0,0,0,0.04); padding: 35px; }
       .footer-req { flex-direction: column; gap: 10px; }
+      .modal-content { padding: 25px; }
     }
   </style>
 </head>
 <body>
   <div class="atmosphere"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
+  
+  <div id="error-modal" onclick="closeErrors(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px;">
+            <h2 style="margin:0; font-weight:900; letter-spacing:-1px;">Internal Server Errors (Last 50)</h2>
+            <button onclick="closeErrors()" style="border:none; background:none; cursor:pointer; font-weight:900; color:var(--muted)">CLOSE</button>
+        </div>
+        <div id="error-list">Loading...</div>
+    </div>
+  </div>
+
   <div class="container">
     <header>
       <img src="https://dev.troo.earth/assets/mainLogo-Do2wEJmm.svg" class="brand-logo">
@@ -293,6 +319,7 @@ router.get('/', async (req, res) => {
 
     <div class="footer-msg">
       <div class="flex-line">
+        <button class="btn-errors" onclick="showErrors()">View Error Log</button>
         <div id="updates-status" style="font-weight:800; color:var(--muted)">Live Updates Active · <span id="count">3</span> refreshes remaining</div>
         <button id="btn-refresh" class="btn-refresh" onclick="tick(true)">Manual Refresh</button>
       </div>
@@ -304,15 +331,13 @@ router.get('/', async (req, res) => {
     let left = 3;
     const bar = document.getElementById('progress-bar');
 
-const fmt = (s) => { 
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60);
-  return d > 0 
-    ? \`\${d}d \${h}h \${m}m\` 
-    : \`\${h}h \${m}m \${sec}s\`; 
-};
+    const fmt = (s) => { 
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = Math.floor(s % 60);
+      return d > 0 ? \`\${d}d \${h}h \${m}m\` : \`\${h}h \${m}m \${sec}s\`; 
+    };
 
     const resetBar = () => { bar.style.transition='none'; bar.style.width='0%'; void bar.offsetWidth; bar.style.transition='width 10s linear'; bar.style.width='100%'; };
     
@@ -363,11 +388,36 @@ const fmt = (s) => {
         }
       } catch(e){}
     }
+
+    async function showErrors() {
+        const modal = document.getElementById('error-modal');
+        const list = document.getElementById('error-list');
+        modal.style.display = 'flex';
+        list.innerHTML = 'Fetching logs...';
+        try {
+            const r = await fetch('/health/errors');
+            const errors = await r.json();
+            if (errors.length === 0) {
+                list.innerHTML = '<div style="text-align:center; padding:40px; color:var(--muted); font-weight:700;">No internal errors recorded. You\\'re doing great.</div>';
+                return;
+            }
+            list.innerHTML = errors.map(e => \`
+                <div class="error-item">
+                    <div class="err-meta"><span>\${new Date(e.time).toLocaleString()}</span> <span>\${e.method} \${e.path}</span></div>
+                    <div class="err-msg">\${e.message}</div>
+                    \${e.stack ? \`<div class="err-stack">\${e.stack}</div>\` : ''}
+                </div>
+            \`).join('');
+        } catch (e) { list.innerHTML = 'Error loading logs.'; }
+    }
+
+    function closeErrors() { document.getElementById('error-modal').style.display = 'none'; }
+
     setTimeout(() => { 
-  const data = JSON.parse(\`${JSON.stringify(health).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`);
-  updateUI(data); 
-  resetBar(); 
-}, 100);
+      const data = JSON.parse(\`${JSON.stringify(health).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`);
+      updateUI(data); 
+      resetBar(); 
+    }, 100);
     setInterval(() => tick(), 10000);
   </script>
 </body>
@@ -378,6 +428,13 @@ const fmt = (s) => {
 router.get('/health/json', async (req, res) => {
   const health = await collectHealth();
   res.json({ service: 'troo-earth-api', ...health });
+});
+
+router.get('/health/errors', async (req, res) => {
+  try {
+    const errors = await redisClient.lRange(K_ERROR_LOG, 0, 49);
+    res.json(errors.map(e => JSON.parse(e)));
+  } catch (err) { res.status(500).json([]); }
 });
 
 module.exports = { healthRouter: router, markRequest };

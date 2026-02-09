@@ -11,10 +11,13 @@ const { destroyUserSessions } = require('../auth/policies/sessionInvalidation');
 const sendInviteService = async ({
   actorUserId,
   actorRole,
+  actorEmail,
   org_id,
   email,
   role,
 }) => {
+
+  const normalizedEmail = email.toLowerCase();
 
   await validateRoleAssignment({
     actorRole,
@@ -24,10 +27,22 @@ const sendInviteService = async ({
     actorUserId,
   });
 
+  // Prevent self invite
+  if (normalizedEmail === actorEmail.toLowerCase()) {
+    throw new Error('You cannot invite yourself');
+  }
+
+  // Prevent inviting existing org member
+  const existingUser = await User.findOne({ where: { email: normalizedEmail } });
+  if (existingUser && existingUser.org_id === org_id) {
+    throw new Error('User already belongs to this organization');
+  }
+
+  // Prevent duplicate pending invite
   const existingInvite = await Invitation.findOne({
     where: {
       org_id,
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       status: 'pending',
     },
   });
@@ -43,32 +58,31 @@ const sendInviteService = async ({
 
   const invitation = await Invitation.create({
     org_id,
-    email: email.toLowerCase(),
+    email: normalizedEmail,
     role,
     invite_token,
     expires_at,
     created_by: actorUserId,
   });
 
-  // Invite link (frontend route)
-  const inviteLink = `atlas.troo.earth/accept-invite?token=${invite_token}`;
-
   const org = await Org.findByPk(org_id);
+
+  const inviteLink = `atlas.troo.earth/accept-invite?token=${invite_token}`;
 
   const html = invitationTemplate({
     invite_link: inviteLink,
-    org_name: org.org_name,   // fetch once using Org.findByPk if needed
+    org_name: org.org_name,
     role,
   });
 
   await sendEmail({
-    to: email,
+    to: normalizedEmail,
     subject: `You have been invited to join ${org.org_name} on troo.earth`,
     html,
   });
-  return invitation;
 
-}
+  return invitation;
+};
 
 const acceptInvitationService = async ({ token, user_id }) => {
 
@@ -76,9 +90,7 @@ const acceptInvitationService = async ({ token, user_id }) => {
     where: { invite_token: token },
   });
 
-  if (!invitation) {
-    throw new Error('Invalid invitation token');
-  }
+  if (!invitation) throw new Error('Invalid invitation token');
 
   if (invitation.status !== 'pending') {
     throw new Error('Invitation is no longer valid');
@@ -91,21 +103,20 @@ const acceptInvitationService = async ({ token, user_id }) => {
   }
 
   const user = await User.findByPk(user_id);
+  if (!user) throw new Error('User not found');
 
-  if (!user) {
-    throw new Error('User not found');
+  // Ensure invite email matches account email
+  if (user.email.toLowerCase() !== invitation.email.toLowerCase()) {
+    throw new Error('Invitation email does not match logged-in user');
   }
 
-  // Attach org + role
   user.org_id = invitation.org_id;
   user.role = invitation.role;
   await user.save();
 
-  // Mark invite accepted
   invitation.status = 'accepted';
   await invitation.save();
 
-  // Invalidate sessions so new role/org takes effect
   await destroyUserSessions(user_id);
 
   return { org_id: invitation.org_id, role: invitation.role };
@@ -133,15 +144,8 @@ const revokeInvitationService = async ({ email, org_id }) => {
 
 const listOrgInvitationsService = async ({ org_id, status }) => {
 
-  if (!org_id) {
-    throw new Error('org_id missing from session');
-  }
-
   const where = { org_id };
-
-  if (status) {
-    where.status = status;
-  }
+  if (status) where.status = status;
 
   const invitations = await Invitation.findAll({
     where,
@@ -163,18 +167,20 @@ const listOrgInvitationsService = async ({ org_id, status }) => {
 const resendInvitationService = async ({ email, org_id }) => {
 
   const invitation = await Invitation.findOne({
-    where: { email: email.toLowerCase(), org_id },
+    where: {
+      email: email.toLowerCase(),
+      org_id,
+      status: ['pending', 'expired'],
+    },
+    order: [['createdAt', 'DESC']],
   });
 
-  if (!invitation) {
-    throw new Error('Invitation not found');
-  }
+  if (!invitation) throw new Error('Invitation not found');
 
   if (invitation.status === 'accepted') {
     throw new Error('Invitation already accepted');
   }
 
-  // Regenerate token
   const invite_token = crypto.randomBytes(32).toString('hex');
 
   const expires_at = new Date();
@@ -183,21 +189,21 @@ const resendInvitationService = async ({ email, org_id }) => {
   invitation.invite_token = invite_token;
   invitation.status = 'pending';
   invitation.expires_at = expires_at;
-
   await invitation.save();
 
+  const org = await Org.findByPk(org_id);
+
   const inviteLink = `atlas.troo.earth/accept-invite?token=${invite_token}`;
-   const org = await Org.findByPk(org_id);
-  const org_name = org ? org.org_name : 'your organization';
+
   const html = invitationTemplate({
     invite_link: inviteLink,
-    org_name,
+    org_name: org.org_name,
     role: invitation.role,
   });
 
   await sendEmail({
     to: email,
-    subject: `Reminder: Invitation to join ${org_name}`,
+    subject: `Reminder: Invitation to join ${org.org_name}`,
     html,
   });
 
@@ -206,17 +212,13 @@ const resendInvitationService = async ({ email, org_id }) => {
 
 const checkInvitationTokenService = async ({ token }) => {
 
-  if (!token) {
-    throw new Error('Invitation token is required');
-  }
+  if (!token) throw new Error('Invitation token is required');
 
   const invitation = await Invitation.findOne({
     where: { invite_token: token },
   });
 
-  if (!invitation) {
-    throw new Error('Invalid invitation token');
-  }
+  if (!invitation) throw new Error('Invalid invitation token');
 
   if (invitation.status !== 'pending') {
     throw new Error('Invitation is no longer valid');
@@ -228,7 +230,6 @@ const checkInvitationTokenService = async ({ token }) => {
     throw new Error('Invitation has expired');
   }
 
-  // Check if user already exists
   const existingUser = await User.findOne({
     where: { email: invitation.email },
     attributes: ['user_id'],

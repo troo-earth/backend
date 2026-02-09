@@ -111,8 +111,6 @@ app.use('/api/v1/listing-events', listingEventsRoutes);
 
 app.use(errorHandler);
 
-// Conditional listen ONLY for local development
-// Only start the server when running locally (not on Vercel)
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const PORT = process.env.PORT || 3000;
 
@@ -122,5 +120,4 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   });
 }
 
-// REQUIRED for Vercel
 module.exports = app;

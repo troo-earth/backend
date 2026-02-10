@@ -12,10 +12,7 @@ const { withLogging } = require('../../utils/logger');
 const sendInviteController = async (req, res, next) => {
   try {
     const { email, role } = req.body;
-
-    if (!email || !role) {
-      return res.error('Email and role are required', 400);
-    }
+    if (!email || !role) return res.error('Email and role are required', 400);
 
     const actor = req.session.user;
 
@@ -31,20 +28,35 @@ const sendInviteController = async (req, res, next) => {
     return res.success('Invitation sent successfully', invitation);
 
   } catch (error) {
-    if (error.message) {
-      return res.error(error.message, 400);
-    }
-    next(error); 
+    if (error.message) return res.error(error.message, 400);
+    next(error);
+  }
+};
+
+const resendInvitationController = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.error('Email is required', 400);
+
+    const actor = req.session.user;
+
+    const invitation = await resendInvitationService({
+      email,
+      org_id: actor.org_id,
+    });
+
+    return res.success('Invitation resent successfully', invitation);
+
+  } catch (err) {
+    if (err.message) return res.error(err.message, 400);
+    next(err);
   }
 };
 
 const acceptInvitationController = async (req, res, next) => {
   try {
     const { token } = req.body;
-
-    if (!token) {
-      return res.error('Invitation token required', 400);
-    }
+    if (!token) return res.error('Invitation token required', 400);
 
     const actor = req.session.user;
 
@@ -56,9 +68,7 @@ const acceptInvitationController = async (req, res, next) => {
     return res.success('Invitation accepted successfully', result);
 
   } catch (err) {
-    if (err.message) {
-      return res.error(err.message, 400);
-    }
+    if (err.message) return res.error(err.message, 400);
     next(err);
   }
 };
@@ -99,29 +109,6 @@ const listOrgInvitationsController = async (req, res, next) => {
     });
 
     return res.success('Invitations fetched successfully', invitations);
-
-  } catch (err) {
-    if (err.message) {
-      return res.error(err.message, 400);
-    }
-    next(err);
-  }
-};
-
-const resendInvitationController = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) return res.error('Email is required', 400);
-
-    const actor = req.session.user;
-
-    const invitation = await resendInvitationService({
-      email,
-      org_id: actor.org_id,
-    });
-
-    return res.success('Invitation resent successfully', invitation);
 
   } catch (err) {
     if (err.message) {

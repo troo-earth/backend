@@ -37,15 +37,6 @@ app.post(
   buildStripeWebhookExpressHandler()
 );
 
-app.use((err, req, res, next) => {
-  if (res.statusCode === 500) {
-    markRequest(req, res, err); 
-  } else {
-    markRequest(req, res); 
-  }
-  next(err);
-});
-
 // Middleware (same as before)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -85,6 +76,13 @@ app.use((req, res, next) => {
 
 app.set('trust proxy', 1);
 app.use(sessionMiddleware);
+
+/* request tracker */
+app.use((req, res, next) => {
+  markRequest(req, res);
+  next();
+});
+
 app.use(responseFormatter);
 app.use(tracingMiddleware);
 app.use(globalRouteLogger);
@@ -112,6 +110,12 @@ app.use('/api/v1/trading', tradingRoutes);
 app.use('/api/v1/transactions', transactionsRoutes);
 app.use('/api/v1/retirements', retirementRoutes);
 app.use('/api/v1/listing-events', listingEventsRoutes);
+
+/* error logging */
+app.use((err, req, res, next) => {
+  markRequest(req, res, err);
+  next(err);
+});
 
 app.use(errorHandler);
 

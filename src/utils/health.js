@@ -7,21 +7,14 @@ const redisClient = require('../config/redis');
 
 const router = express.Router();
 
-/* -------------------------------
-    GLOBAL PERMANENT REDIS KEYS
--------------------------------- */
 const K_REQ_TOTAL = 'health:global:req_total';
 const K_REQ_ERRORS = 'health:global:req_errors';
 const K_RES_TIME = 'health:global:res_time_total';
 const K_RES_COUNT = 'health:global:res_count';
 const K_START_TIME = 'health:global:start_time';
 const K_LAST_REQ = 'health:global:last_request';
-const K_ERROR_LOG = 'health:global:error_log'; // New key for error list
+const K_ERROR_LOG = 'health:global:error_log'; 
 
-/**
- * Middleware/Helper to log requests and errors
- * Note: For 500 errors, you should call this or have a global error handler call it.
- */
 function markRequest(req, res, error = null) {
   const path = req.originalUrl || req.path;
   if (path === '/' || path.startsWith('/health') || path.includes('favicon')) return;

@@ -237,11 +237,15 @@ const checkInvitationTokenService = async ({ token }) => {
     throw new Error('Invitation has expired');
   }
 
+  const org = await Org.findByPk(invitation.org_id);
+
   return {
     email: invitation.email,   
     role: invitation.role,
     org_id: invitation.org_id,
     valid: true,
+    org_name: org.org_name,
+    org_code: org.org_code,
   };
 };
 

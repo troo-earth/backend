@@ -56,7 +56,9 @@ const resendInvitationController = async (req, res, next) => {
 const acceptInvitationController = async (req, res, next) => {
   try {
     const { token } = req.body;
-    if (!token) return res.error('Invitation token required', 400);
+    if (!token) {
+      return res.error('Invitation token required', 400);
+    }
 
     const actor = req.session.user;
 
@@ -65,13 +67,24 @@ const acceptInvitationController = async (req, res, next) => {
       user_id: actor.user_id,
     });
 
-    return res.success('Invitation accepted successfully', result);
+    req.session.regenerate((err) => {
+      if (err) return next(err);
+
+      req.session.user = {
+        ...actor,
+        org_id: result.org_id,
+        role: result.role,
+      };
+
+      return res.success('Invitation accepted successfully', result);
+    });
 
   } catch (err) {
     if (err.message) return res.error(err.message, 400);
     next(err);
   }
 };
+
 
 const revokeInvitationController = async (req, res, next) => {
   try {
